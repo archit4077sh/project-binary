@@ -1,0 +1,29 @@
+============================================================
+  [*] Frontend Question Automation System
+  Mode      : DRY RUN (no typing)
+  Questions : 3
+  Difficulty: 3 - Staff-Level Design
+  Countdown : 10s
+============================================================
+
+[DRY RUN] No keyboard actions will be taken.
+
+------------------------------------------------------------
+  Q01/03 | Theme: react_internals > strict_mode_double_invoke
+  [Memory] 0/54 topics used this session
+------------------------------------------------------------
+
+**Context:**
+We recently enabled React 18's StrictMode across our entire Next.js 14 SaaS dashboard app. Now we're seeing some unexpected behavior in components that have side effects in the render phase ? specifically a custom `useDataGridStore` hook that initializes some WebGL canvas on mount.
+
+**Observed Issue:**
+With StrictMode, the WebGL canvas is being initialized twice, and the second initialization errors with "WebGL context already exists on this canvas element". This doesn't happen in production (StrictMode is dev-only), but it's destroying our dev DX and hiding real bugs.
+
+**Specific Ask:**
+Beyond just "clean up in useEffect's return function", what are the patterns for handling truly non-idempotent initializations (WebGL, third-party chart libs, WebSockets) in a StrictMode-safe way? Is the pattern to track initialization with a ref? And how do you test that your cleanup is actually complete when StrictMode unmounts/remounts?
+
+------------------------------------------------------------
+  Q02/03 | Theme: typescript > complex_generic_inference
+  [Memory] 1/54 topics used this session
+------------------------------------------------------------
+
