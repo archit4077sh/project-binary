@@ -7,6 +7,7 @@ Usage:
     python main.py --dry-run              # print questions, no keyboard actions
     python main.py --countdown 15         # 15 second countdown before typing starts
     python main.py --difficulty 5         # question intensity (1-5, cosmetic label)
+    python main.py --reset                # wipe saved state and start a fresh cycle
     python main.py --dry-run --questions 3 --difficulty 4
 """
 
@@ -50,6 +51,10 @@ Examples:
         "--dry-run", action="store_true",
         help="Print questions to console only -- no keyboard actions fired"
     )
+    parser.add_argument(
+        "--reset", "-r", action="store_true",
+        help="Delete saved session state and start a fresh question cycle"
+    )
     return parser.parse_args()
 
 
@@ -72,6 +77,16 @@ DIFFICULTY_LABELS = {
 
 def main() -> None:
     args = parse_args()
+
+    # Handle --reset before creating SessionMemory (which loads state)
+    if args.reset:
+        from session_memory import _STATE_FILE
+        if _STATE_FILE.exists():
+            _STATE_FILE.unlink()
+            print("[*] Session state wiped. Starting a fresh question cycle.\n")
+        else:
+            print("[*] No saved state found — already starting fresh.\n")
+
     memory = SessionMemory()
 
     SEP = "=" * 60
@@ -115,6 +130,8 @@ def main() -> None:
             print()
         else:
             import human_simulator as hs
+            print("  [Clicking input to re-focus...]")
+            hs.click_input()
             print("  [Typing...]")
             hs.type_humanly(question)
             hs.press_enter()

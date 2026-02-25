@@ -23,10 +23,12 @@ from config import (
 # Characters that trigger a longer post-character pause
 PUNCTUATION_CHARS = set(".,;:!?")
 
-# pyautogui safety: disable fail-safe (moving mouse to corner won't abort)
-# Comment this out if you want the fail-safe enabled:
+# pyautogui safety
 pyautogui.FAILSAFE = True
 pyautogui.PAUSE = 0  # we manage delays ourselves
+
+# Saved position of the chat input box — captured during countdown
+_INPUT_POS: tuple[int, int] | None = None
 
 
 def type_humanly(text: str) -> None:
@@ -83,15 +85,30 @@ def press_enter() -> None:
 def countdown(seconds: int) -> None:
     """
     Print a countdown so the user has time to click into the chat input.
-    Displays a live countdown in the terminal.
+    Captures the mouse position at the end so we can re-click it automatically.
     """
+    global _INPUT_POS
     print(f"\n[WAIT] You have {seconds} seconds to click into the chat input box...")
     for remaining in range(seconds, 0, -1):
         sys.stdout.write(f"\r   > Starting in {remaining:2d} seconds...  ")
         sys.stdout.flush()
         time.sleep(1)
-    sys.stdout.write("\r   > Typing now!                    \n\n")
+    # Snapshot the cursor position — user should be hovering over / inside the input now
+    _INPUT_POS = pyautogui.position()
+    sys.stdout.write(f"\r   > Typing now! (input locked at {_INPUT_POS.x},{_INPUT_POS.y})   \n\n")
     sys.stdout.flush()
+
+
+def click_input() -> None:
+    """
+    Click the saved input box position to re-focus it.
+    Called automatically before every question after the first.
+    """
+    if _INPUT_POS is None:
+        return  # no position saved yet (e.g. dry-run)
+    time.sleep(random.uniform(0.3, 0.6))  # small natural delay before clicking
+    pyautogui.click(_INPUT_POS.x, _INPUT_POS.y)
+    time.sleep(random.uniform(0.2, 0.4))  # let the UI register the focus
 
 
 def random_idle(min_seconds: int = WAIT_MIN_SECONDS, max_seconds: int = WAIT_MAX_SECONDS) -> None:
