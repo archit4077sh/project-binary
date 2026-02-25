@@ -85,10 +85,6 @@
       "1"
     ],
     [
-      "architecture",
-      "16"
-    ],
-    [
       "state_management",
       "2"
     ],
@@ -123,14 +119,6 @@
     [
       "typescript",
       "1"
-    ],
-    [
-      "react_internals",
-      "5"
-    ],
-    [
-      "architecture",
-      "25"
     ],
     [
       "performance",
@@ -185,10 +173,6 @@
       "17"
     ],
     [
-      "state_management",
-      "24"
-    ],
-    [
       "testing",
       "7"
     ],
@@ -217,10 +201,6 @@
       "19"
     ],
     [
-      "performance",
-      "5"
-    ],
-    [
       "architecture",
       "20"
     ],
@@ -231,10 +211,6 @@
     [
       "nextjs_advanced",
       "4"
-    ],
-    [
-      "state_management",
-      "6"
     ],
     [
       "react_internals",
@@ -270,10 +246,6 @@
     ],
     [
       "performance",
-      "16"
-    ],
-    [
-      "performance",
       "21"
     ],
     [
@@ -283,10 +255,6 @@
     [
       "css_rendering",
       "5"
-    ],
-    [
-      "nextjs_advanced",
-      "2"
     ],
     [
       "architecture",
@@ -325,10 +293,6 @@
       "16"
     ],
     [
-      "performance",
-      "15"
-    ],
-    [
       "react_internals",
       "25"
     ],
@@ -343,10 +307,6 @@
     [
       "performance",
       "20"
-    ],
-    [
-      "testing",
-      "13"
     ],
     [
       "debugging",
@@ -453,10 +413,6 @@
       "16"
     ],
     [
-      "react_internals",
-      "11"
-    ],
-    [
       "typescript",
       "2"
     ],
@@ -489,10 +445,6 @@
       "8"
     ],
     [
-      "architecture",
-      "24"
-    ],
-    [
       "nextjs_advanced",
       "20"
     ],
@@ -505,20 +457,12 @@
       "9"
     ],
     [
-      "css_rendering",
-      "25"
-    ],
-    [
       "architecture",
       "8"
     ],
     [
       "performance",
       "24"
-    ],
-    [
-      "css_rendering",
-      "9"
     ],
     [
       "react_internals",
@@ -562,10 +506,6 @@
     ],
     [
       "react_internals",
-      "7"
-    ],
-    [
-      "css_rendering",
       "7"
     ],
     [
@@ -645,10 +585,6 @@
       "23"
     ],
     [
-      "testing",
-      "26"
-    ],
-    [
       "state_management",
       "11"
     ],
@@ -663,14 +599,6 @@
     [
       "debugging",
       "5"
-    ],
-    [
-      "architecture",
-      "9"
-    ],
-    [
-      "nextjs_advanced",
-      "17"
     ],
     [
       "state_management",
@@ -918,10 +846,6 @@
     ],
     [
       "state_management",
-      "7"
-    ],
-    [
-      "state_management",
       "15"
     ],
     [
@@ -931,14 +855,6 @@
     [
       "state_management",
       "1"
-    ],
-    [
-      "debugging",
-      "0"
-    ],
-    [
-      "architecture",
-      "18"
     ],
     [
       "typescript",
@@ -953,10 +869,6 @@
       "0"
     ],
     [
-      "debugging",
-      "24"
-    ],
-    [
       "performance",
       "10"
     ],
@@ -967,10 +879,6 @@
     [
       "react_internals",
       "10"
-    ],
-    [
-      "debugging",
-      "13"
     ],
     [
       "architecture",
@@ -1003,13 +911,105 @@
   ],
   "used": [
     [
+      "debugging",
+      "13"
+    ],
+    [
+      "debugging",
+      "24"
+    ],
+    [
+      "state_management",
+      "24"
+    ],
+    [
       "nextjs_advanced",
-      "10"
+      "17"
+    ],
+    [
+      "nextjs_advanced",
+      "2"
     ],
     [
       "testing",
       "4"
+    ],
+    [
+      "architecture",
+      "9"
+    ],
+    [
+      "architecture",
+      "25"
+    ],
+    [
+      "testing",
+      "26"
+    ],
+    [
+      "state_management",
+      "6"
+    ],
+    [
+      "debugging",
+      "0"
+    ],
+    [
+      "architecture",
+      "18"
+    ],
+    [
+      "testing",
+      "13"
+    ],
+    [
+      "react_internals",
+      "11"
+    ],
+    [
+      "react_internals",
+      "5"
+    ],
+    [
+      "performance",
+      "15"
+    ],
+    [
+      "nextjs_advanced",
+      "10"
+    ],
+    [
+      "architecture",
+      "16"
+    ],
+    [
+      "architecture",
+      "24"
+    ],
+    [
+      "state_management",
+      "7"
+    ],
+    [
+      "css_rendering",
+      "9"
+    ],
+    [
+      "css_rendering",
+      "7"
+    ],
+    [
+      "css_rendering",
+      "25"
+    ],
+    [
+      "performance",
+      "16"
+    ],
+    [
+      "performance",
+      "5"
     ]
   ],
-  "last_theme": "testing"
+  "last_theme": "performance"
 }

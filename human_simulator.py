@@ -1,31 +1,22 @@
 """
-human_simulator.py — OS-level keyboard automation using pyautogui.
-Simulates human typing with variable keystroke delays and natural pauses.
+human_simulator.py — OS-level keyboard automation using pyautogui + pyperclip.
+Uses clipboard paste for instant question delivery instead of char-by-char typing.
 """
 
 import time
 import random
 import sys
 import pyautogui
+import pyperclip
 
 from config import (
-    TYPING_DELAY_MIN,
-    TYPING_DELAY_MAX,
-    PUNCTUATION_PAUSE_MIN,
-    PUNCTUATION_PAUSE_MAX,
-    THINKING_PAUSE_MIN,
-    THINKING_PAUSE_MAX,
-    THINKING_PAUSE_PROBABILITY,
     WAIT_MIN_SECONDS,
     WAIT_MAX_SECONDS,
 )
 
-# Characters that trigger a longer post-character pause
-PUNCTUATION_CHARS = set(".,;:!?")
-
 # pyautogui safety
 pyautogui.FAILSAFE = True
-pyautogui.PAUSE = 0  # we manage delays ourselves
+pyautogui.PAUSE = 0
 
 # Saved position of the chat input box — captured during countdown
 _INPUT_POS: tuple[int, int] | None = None
@@ -33,47 +24,23 @@ _INPUT_POS: tuple[int, int] | None = None
 
 def type_humanly(text: str) -> None:
     """
-    Type `text` character-by-character with human-like timing:
-    - Random 30-120ms delay per character
-    - 200-600ms pause after punctuation
-    - Random 500-1500ms 'thinking' pause at ~4% of spaces
-    - Newlines (\\n) are sent as Shift+Enter to avoid premature submission
-    - Only press_enter() at the end sends the bare Enter to submit
+    Paste `text` instantly via the clipboard.
+
+    The question is split on newlines. Each line is copied to the clipboard
+    and pasted with Ctrl+V. Between lines, Shift+Enter inserts a newline
+    without submitting. This avoids slow char-by-char typing entirely.
     """
-    for char in text:
-        if char == "\n":
-            # Shift+Enter = new line without submitting (works in ChatGPT, Claude, Gemini)
+    lines = text.split("\n")
+    for i, line in enumerate(lines):
+        # Copy line to clipboard and paste it
+        pyperclip.copy(line)
+        pyautogui.hotkey("ctrl", "v")
+        time.sleep(0.05)  # tiny settle time after paste
+
+        if i < len(lines) - 1:
+            # Shift+Enter = newline without submitting
             pyautogui.hotkey("shift", "enter")
-            delay = random.uniform(0.08, 0.20)
-        elif char == "`":
-            # pyautogui.write can't type backticks reliably on some keyboards
-            pyautogui.hotkey("shift", "grave") if False else _type_char(char)
-            delay = random.uniform(TYPING_DELAY_MIN, TYPING_DELAY_MAX)
-        else:
-            _type_char(char)
-            # Determine post-char delay
-            if char in PUNCTUATION_CHARS:
-                delay = random.uniform(PUNCTUATION_PAUSE_MIN, PUNCTUATION_PAUSE_MAX)
-            elif char == " " and random.random() < THINKING_PAUSE_PROBABILITY:
-                delay = random.uniform(THINKING_PAUSE_MIN, THINKING_PAUSE_MAX)
-            else:
-                delay = random.uniform(TYPING_DELAY_MIN, TYPING_DELAY_MAX)
-
-        time.sleep(delay)
-
-
-def _type_char(char: str) -> None:
-    """Type a single character, with a unicode-safe fallback via clipboard paste."""
-    try:
-        pyautogui.write(char, interval=0)
-    except Exception:
-        # For characters pyautogui can't write directly, use clipboard paste
-        import pyperclip  # optional fast-path, ignored if not installed
-        try:
-            pyperclip.copy(char)
-            pyautogui.hotkey("ctrl", "v")
-        except Exception:
-            pass  # silently skip truly un-typeable chars
+            time.sleep(0.05)
 
 
 def press_enter() -> None:
