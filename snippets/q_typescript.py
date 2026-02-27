@@ -1,509 +1,438 @@
 """
-snippets/q_typescript.py - 28 TypeScript Advanced questions
+snippets/q_typescript.py — 28 FRESH TypeScript questions (mix of debugging + code generation)
+Zero overlap with archived set.
 """
 
 Q_TYPESCRIPT = [
 
-"""**Context:**
-We have a generic fetchResource function. TypeScript correctly infers the return type in most cases but fails in a specific composition.
+"""**Task (Code Generation):**
+Implement a type-safe `pipe` function that composes up to 5 functions left-to-right with correct TypeScript inference:
 
-**Code:**
 ```ts
-async function fetchResource<T>(url: string): Promise<T> {
-  const res = await fetch(url);
-  return res.json() as T;
+const result = pipe(
+  (s: string) => s.split(','),
+  (arr: string[]) => arr.map(Number),
+  (nums: number[]) => nums.filter(Boolean),
+  (nums: number[]) => nums.reduce((a, b) => a + b, 0)
+); // inferred as (s: string) => number
+```
+
+Use function overloads for arities 1-5. Explain why a single generic signature with rest params doesn't work for this use case and what variadic tuple types offer.""",
+
+"""**Debug Scenario:**
+A generic `Repository<T>` class has a method `findById` that should return `T | null`. TypeScript infers it as `T | null` correctly at the class level, but when used through an interface, TypeScript widens the return type to `object | null`.
+
+```ts
+interface IRepository<T> {
+  findById(id: string): Promise<T | null>;
 }
-
-// works:
-const user = await fetchResource<User>('/api/user');
-
-// fails to infer -- T becomes unknown:
-const pipeline = (url: string) => fetchResource(url);
-```
-
-**Observed Issue:**
-When wrapped in another function, TypeScript loses the generic -- T is inferred as unknown instead of being propagated.
-
-**Specific Ask:**
-How do you write a wrapper function that preserves the generic of the inner function, allowing callers of pipeline<User>(url) to get the correct inferred type? Is there a way to make pipeline itself generic in a way TypeScript can infer from the call site?""",
-
-"""**Context:**
-Our design system components accept a polymorphic as prop to render as different HTML elements.
-
-**Code:**
-```ts
-type PolymorphicProps<C extends React.ElementType> = {
-  as?: C;
-} & React.ComponentPropsWithoutRef<C>;
-```
-
-**Observed Issue:**
-When we compose PolymorphicProps with our own props via intersection, TypeScript fails to narrow the allowed HTML attributes correctly. Passing href to a component renders as a div, and TypeScript doesn't complain.
-
-**Specific Ask:**
-What's the correct pattern for a fully type-safe polymorphic component where the allowed HTML props are determined by the as prop value? How do major libraries (Radix, Ariakit) implement this without losing type safety, and does it work with generic forwarded refs?""",
-
-"""**Context:**
-We have an API response handler that uses a discriminated union.
-
-**Code:**
-```ts
-type ApiResponse<T> =
-  | { status: 'success'; data: T }
-  | { status: 'error'; error: string };
-
-function handle<T>(res: ApiResponse<T>) {
-  if (res.status === 'success') {
-    console.log(res.data); // TS: 'data' does not exist on type 'ApiResponse<T>'
+class UserRepo implements IRepository<User> {
+  async findById(id: string) {
+    return db.user.findUnique({ where: { id } }); // returns User | null
   }
 }
+const repo: IRepository<User> = new UserRepo();
+const user = await repo.findById('1'); // typed as object | null ??
 ```
 
-**Observed Issue:**
-TypeScript fails to narrow the discriminated union inside a generic function even though the narrowing works perfectly in a non-generic context.
+Diagnose why the return type widens through the interface and fix it.""",
 
-**Specific Ask:**
-Why does TypeScript fail to narrow discriminated unions inside generic functions, and is this a fundamental limitation or a known bug? What's the workaround -- assertion functions, type predicates, or restructuring the generic? Is this fixed in newer TypeScript versions?""",
+"""**Task (Code Generation):**
+Build a type-safe event emitter class with full TypeScript inference:
 
-"""**Context:**
-We wrote a recursive conditional type to unwrap nested Promises.
-
-**Code:**
 ```ts
-type UnwrapPromise<T> = T extends Promise<infer U> ? UnwrapPromise<U> : T;
-type Unwrapped = UnwrapPromise<Promise<Promise<string>>>; // should be 'string'
+const emitter = new TypedEmitter<{
+  'user:login': { userId: string; timestamp: number };
+  'user:logout': { userId: string };
+  'data:update': { rows: Row[]; total: number };
+}>();
+
+emitter.on('user:login', (payload) => {
+  payload.userId; // correctly typed as string
+  payload.timestamp; // number
+});
 ```
 
-**Observed Issue:**
-For simple cases it works, but when used inside a mapped type or combined with another conditional type, TypeScript returns the error: "Type instantiation is excessively deep and possibly infinite."
+The `on`, `off`, `emit` methods must all be fully typed from the event map. Show the implementation using mapped types and template literal keys.""",
 
-**Specific Ask:**
-What's the recursion depth limit for TypeScript conditional types? What's the recommended pattern for recursive types that need to work in production code without hitting the depth error? Does the Awaited<T> built-in utility perform better than a custom recursive type?""",
+"""**Debug Scenario:**
+A utility type `DeepPartial<T>` is used to allow partial updates to nested config objects. It works for plain objects but fails for `Date`, `Map`, `Set`, and array types.
 
-"""**Context:**
-We have a large form type and need to extract all keys whose value type is string for a utility function.
-
-**Code:**
 ```ts
-type StringKeys<T> = {
-  [K in keyof T]: T[K] extends string ? K : never;
-}[keyof T];
-
-type UserStringFields = StringKeys<UserForm>; // expected: 'firstName' | 'lastName' | 'email'
-```
-
-**Observed Issue:**
-When T has optional fields (key?: string), the mapped type distributes never for those fields because T[K] becomes string | undefined which doesn't extend string.
-
-**Specific Ask:**
-How do you write a conditional type that handles optional properties correctly -- where key?: string should still be included in StringKeys? Is NonNullable<T[K]> the right tool, or does this cause other issues with the type distribution?""",
-
-"""**Context:**
-We're using template literal types to generate strongly-typed event names for our analytics system.
-
-**Code:**
-```ts
-type EventName = `${Screen}_${Action}`;
-type Screen = 'dashboard' | 'report' | 'settings';
-type Action = 'viewed' | 'clicked' | 'submitted';
-// produces: 'dashboard_viewed' | 'dashboard_clicked' | ... (9 combinations)
-```
-
-**Observed Issue:**
-When Screen and Action union members grow large (~20 each), TypeScript starts taking 10+ seconds to type-check files that use EventName due to the combinatorial explosion (400+ combinations).
-
-**Specific Ask:**
-At what union size does template literal type distribution become a performance problem? What's the recommended alternative for large event name schemas -- a plain string enum, a const object, or a Zod schema? Is there a way to keep template literal types without paying the full combinatorial type-checking cost?""",
-
-"""**Context:**
-We have a callback-based API where covariance/contravariance causes unexpected type errors.
-
-**Code:**
-```ts
-type Handler<T> = (event: T) => void;
-
-const mouseHandler: Handler<MouseEvent> = (e) => console.log(e.clientX);
-const eventHandler: Handler<Event> = mouseHandler; // Error: MouseEvent is not assignable to Event
-```
-
-**Observed Issue:**
-We expected a MouseEvent handler to be assignable to an Event handler (since MouseEvent extends Event), but TypeScript rejects it. The function parameter position is contravariant.
-
-**Specific Ask:**
-Explain why function parameters are contravariant in TypeScript and what this means practically for callback types. When building an event system where handlers need to be stored in a generic Map<string, Handler<Event>>, what's the correct type design that satisfies TypeScript without using any?""",
-
-"""**Context:**
-We have a set of overloaded parse functions that TypeScript fails to infer correctly when called from a generic context.
-
-**Code:**
-```ts
-function parse(input: string): ParsedString;
-function parse(input: number): ParsedNumber;
-function parse(input: unknown): unknown { ... }
-
-function wrap<T extends string | number>(val: T): ReturnType<typeof parse> {
-  return parse(val); // Error: no overload matches T
-}
-```
-
-**Observed Issue:**
-TypeScript can't match T extends string | number to either overload because T is a type variable, not a concrete type.
-
-**Specific Ask:**
-Why can't TypeScript match type variables against function overloads? What's the idiomatic fix -- conditional return types on wrap, separate overloads for wrap itself, or restructuring parse to use a conditional type instead of overloads?""",
-
-"""**Context:**
-We have a utility type that composes Partial and Required to create a "required-core, optional-extras" object shape.
-
-**Code:**
-```ts
-type CoreRequired<T, K extends keyof T> = Required<Pick<T, K>> & Partial<Omit<T, K>>;
-
-type Config = CoreRequired<DashboardConfig, 'apiUrl' | 'userId'>;
-```
-
-**Observed Issue:**
-When passing a Config object to a function expecting DashboardConfig, TypeScript complains even though Config should be assignable -- it has all required fields plus optionals.
-
-**Specific Ask:**
-Does intersection of Required<Pick<...>> & Partial<Omit<...>> produce a type that TypeScript considers structurally assignable to the original type? Or does the intersection create a type that looks correct but has different structural semantics? Is there a simpler built-in utility type composition that achieves this?""",
-
-"""**Context:**
-We need to augment a third-party Express-like framework's Request type to add our custom session property without modifying its source.
-
-**Code:**
-```ts
-// types/express.d.ts
-declare module 'express' {
-  interface Request {
-    session: UserSession;
-  }
-}
-```
-
-**Observed Issue:**
-The augmentation works in some files but not all. In files where we import from 'express' indirectly (through a wrapper module), the session property isn't recognized.
-
-**Specific Ask:**
-What are the rules for module augmentation scope in TypeScript? Why would an augmentation apply in some files but not others? Does the .d.ts file need to be included in tsconfig.json's include array, or referenced via triple-slash directives in every file?""",
-
-"""**Context:**
-We want to create a type that extracts only the async function properties from an interface.
-
-**Code:**
-```ts
-type AsyncMethods<T> = {
-  [K in keyof T]: T[K] extends (...args: any[]) => Promise<any> ? K : never;
-}[keyof T];
-
-type RepoAsync = AsyncMethods<UserRepository>; // should be only the async method names
-```
-
-**Observed Issue:**
-Methods that return Promise<void> are excluded because Promise<void> doesn't extend Promise<any> in TypeScript's structural check.
-
-**Specific Ask:**
-Why doesn't Promise<void> extend Promise<any> in TypeScript's conditional type check? Should the constraint be (...args: any[]) => Promise<unknown> instead? And does this intersect correctly with methods that have overloads?""",
-
-"""**Context:**
-We need a type-safe async function wrapper that preserves the exact return type of any async function it wraps.
-
-**Code:**
-```ts
-async function withRetry<T>(fn: () => Promise<T>, retries: number): Promise<T> {
-  // ... retry logic
-}
-
-const result = await withRetry(() => fetchUser(id), 3);
-// result should be inferred as User, not Promise<User>
-```
-
-**Observed Issue:**
-When the passed function returns Promise<User>, the inferred T is User (correct). But when the function has a conditional return type, T is inferred as never.
-
-**Specific Ask:**
-How do you write a higher-order async function that correctly infers T from a function with a conditional return type? Is Awaited<ReturnType<F>> the right approach for generic function wrappers? What are the limitations of this approach?""",
-
-"""**Context:**
-We're building a component prop type that extracts props from an existing HTML element, overriding some.
-
-**Code:**
-```ts
-type ButtonProps = Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, 'onClick'> & {
-  onClick: (event: MouseEvent, metadata: TrackingData) => void;
+type DeepPartial<T> = {
+  [K in keyof T]?: T[K] extends object ? DeepPartial<T[K]> : T[K];
 };
+// Problem: Date extends object → DeepPartial<Date> makes all Date methods optional
+// Problem: Array extends object → DeepPartial<string[]> = { [n: number]?: ... }
 ```
 
-**Observed Issue:**
-The Omit + intersection approach loses the correct JSX autocomplete for standard button attributes. TypeScript no longer suggests aria-* or data-* attributes.
+Fix `DeepPartial` to correctly handle built-in types (Date, Map, Set, Arrays) that should be preserved as-is rather than recursed into.""",
 
-**Specific Ask:**
-Is there a better pattern than Omit for extending HTML element props while overriding specific ones? Does React.ComponentPropsWithoutRef<'button'> behave differently from React.ButtonHTMLAttributes? How do design system libraries like Radix preserve full HTML attribute suggestions while adding their own?""",
+"""**Task (Code Generation):**
+Implement a `Result<T, E>` type (Railway-oriented programming) with a full API:
 
-"""**Context:**
-We want to create "branded" or "opaque" types for user IDs to prevent mixing up different ID types.
-
-**Code:**
 ```ts
-type UserId = string & { readonly __brand: 'UserId' };
-type ReportId = string & { readonly __brand: 'ReportId' };
-
-function getUser(id: UserId) { ... }
-getUser('abc' as UserId); // works but requires cast everywhere
+const result = await Result.tryAsync(() => fetchUser(id));
+result
+  .map(user => user.name)
+  .mapError(err => new AppError(err))
+  .getOrElse('Unknown');
 ```
 
-**Observed Issue:**
-Creating branded types requires casting everywhere with as UserId, which is error-prone. Also, branded types don't survive JSON serialization/deserialization.
+Requirements:
+- `Result.ok(value)`, `Result.err(error)`, `Result.tryAsync(fn)`
+- `map`, `mapError`, `flatMap`, `match`, `getOrElse`, `getOrThrow`
+- Full TypeScript generics preserving types through the chain
+- No runtime dependency — pure TypeScript class""",
 
-**Specific Ask:**
-What's the idiomatic TypeScript branded type pattern that minimizes the ergonomic overhead of casting? Is there a way to have TypeScript verify branding at boundaries (API responses, form inputs) without a runtime cost? How do zod schemas help -- does z.string().brand<'UserId'>() solve the serialization problem?""",
+"""**Debug Scenario:**
+A TypeScript project uses `as const` on a large configuration object. Several functions accept keys from this config as parameters. TypeScript correctly narrows the types at the call site but loses the narrowing inside the function body.
 
-"""**Context:**
-We use const assertions throughout our codebase to create narrowly-typed config objects.
-
-**Code:**
 ```ts
-const ROUTES = {
-  dashboard: '/dashboard',
-  reports: '/reports',
-} as const;
+const CONFIG = { timeout: 3000, retries: 3, endpoint: '/api' } as const;
+type ConfigKey = keyof typeof CONFIG;
 
-type RoutePath = typeof ROUTES[keyof typeof ROUTES]; // '/dashboard' | '/reports'
-```
-
-**Observed Issue:**
-When the const object is imported from a module and used in another module's type, the narrow literal types are sometimes widened back to string. This breaks the discriminated union based on route paths.
-
-**Specific Ask:**
-What causes TypeScript to widen literal types after const assertion when values cross module boundaries? Is there a specific re-export pattern that triggers widening? And what's the difference between as const and satisfies for preserving narrow types?""",
-
-"""**Context:**
-We have an object where we want TypeScript to both infer the type AND validate it against an interface without widening.
-
-**Code:**
-```ts
-const config = {
-  theme: 'dark',
-  locale: 'en-US',
-  features: { beta: true },
-}; // inferred as { theme: string; locale: string; features: { beta: boolean } }
-```
-
-**Observed Issue:**
-Using `as const` narrows too aggressively (everything becomes readonly literals). Using a type annotation widens the values. We want to validate structure without losing narrowed inferences on the values.
-
-**Specific Ask:**
-Is the satisfies operator (TypeScript 4.9+) the correct tool here? Does config satisfies DashboardConfig preserve narrow literal types while validating structure? What are the cases where satisfies falls short and you still need as const + type annotation?""",
-
-"""**Context:**
-We're using TypeScript 5's NoInfer utility to prevent TypeScript from inferring a type parameter from a specific argument.
-
-**Code:**
-```ts
-function createSlice<T>(initial: T, handlers: Record<string, (s: NoInfer<T>) => T>) { ... }
-```
-
-**Observed Issue:**
-Without NoInfer, TypeScript infers T from both initial and the handler signatures, sometimes inferring a wider type from a handler's cast. With NoInfer, we're seeing unexpected "type X is not assignable to NoInfer<T>" errors in handlers.
-
-**Specific Ask:**
-How does TypeScript 5's NoInfer<T> work -- does it create a new opaque wrapper type at the type level? What are the common pitfalls of NoInfer in handler patterns? Is this the right tool, or should we constrain the handlers using a separate generic bounded by T?""",
-
-"""**Context:**
-We have a function that accepts a tuple of functions and returns a tuple of their return types.
-
-**Code:**
-```ts
-function runAll<T extends ((...args: any[]) => any)[]>(
-  fns: [...T]
-): { [K in keyof T]: ReturnType<T[K]> } {
-  return fns.map(fn => fn()) as any;
+function getConfig<K extends ConfigKey>(key: K): typeof CONFIG[K] {
+  return CONFIG[key]; // Error: Type 'number | string' is not assignable to type 'typeof CONFIG[K]'
 }
 ```
 
-**Observed Issue:**
-The return type is correctly inferred as a tuple for simple cases. But when fns contains async functions, the return type is Promise<X>[] instead of [Promise<A>, Promise<B>].
+Explain why TypeScript loses the indexed access type inside the generic function and provide the correct fix.""",
 
-**Specific Ask:**
-Why does TypeScript lose tuple structure when mapping over variadic tuple types with ReturnType? Is there a way to make the mapped type preserve tuple positional types instead of widening to an array? Does Awaited<ReturnType<T[K]>> work correctly across variadic positions?""",
+"""**Task (Code Generation):**
+Create a `Schema` builder DSL for runtime validation that also produces TypeScript types:
 
-"""**Context:**
-We have a type predicate function that narrows inside an if-block but TypeScript doesn't narrow in a filter call.
-
-**Code:**
 ```ts
-function isUser(item: User | null): item is User {
-  return item !== null;
-}
+const UserSchema = Schema.object({
+  id: Schema.string().uuid(),
+  age: Schema.number().min(0).max(150),
+  role: Schema.enum(['admin', 'user', 'viewer'] as const),
+  tags: Schema.array(Schema.string()),
+});
 
-const items: (User | null)[] = getItems();
-const users = items.filter(isUser); // TypeScript infers User[] -- correct
-const firstUser = users.find(u => u.id === targetId); // correct
+type User = InferSchema<typeof UserSchema>; // { id: string; age: number; role: 'admin'|'user'|'viewer'; tags: string[] }
+const user = UserSchema.parse(rawData); // throws if invalid
 ```
 
-**Observed Issue:**
-When the type predicate is used inside a more complex conditional with generics, TypeScript stops narrowing and the narrowed type reverts to the union.
+Implement the schema builder without using Zod (for learning purposes). Show `object`, `string`, `number`, `enum`, `array`.""",
 
-**Specific Ask:**
-Under what conditions does TypeScript's type predicate narrowing break down? Is there a known limitation with type predicates inside generic functions or higher-order combinators? Is the asserts keyword an alternative and what are the differences?""",
+"""**Debug Scenario:**
+A function overload is set up for a common utility, but TypeScript always picks the wrong overload in a specific pattern:
 
-"""**Context:**
-We have an abstract base class that dashboard panels extend. We need TypeScript to enforce that all subclasses implement a specific static factory method.
-
-**Code:**
 ```ts
-abstract class DashboardPanel {
-  abstract render(): React.ReactNode;
-  // How to enforce: static create(config: PanelConfig): DashboardPanel
+function format(value: string): string;
+function format(value: number): string;
+function format(value: string | number): string {
+  return String(value);
+}
+
+function formatMany<T extends string | number>(values: T[]): string[] {
+  return values.map(v => format(v)); // Error: Argument of type 'T' is not assignable
 }
 ```
 
-**Observed Issue:**
-TypeScript doesn't allow abstract static methods. Our panels are registered in a factory and instantiated by type, so we need a compile-time guarantee that each subclass has a static create method.
+Explain why overloads fail to resolve in generic contexts, and provide two correct alternatives: one using conditional types, one restructuring to avoid overloads.""",
 
-**Specific Ask:**
-What's the TypeScript pattern to enforce static methods on subclasses? Can a generic type constraint enforce that a class constructor has a specific static method signature? Or is the solution an interface + constructor type (new (...args: any[]) => T) approach?""",
+"""**Task (Code Generation):**
+Implement a `Middleware<Context>` pattern for building composable request processing pipelines:
 
-"""**Context:**
-We have a module with several types exported from a namespace, and a global utility namespace that's conflicting with a local import.
-
-**Code:**
 ```ts
-import * as Utils from './utils';
-// Later:
-namespace Utils { // Error: duplicate identifier (merged? or error?)
-  export function localHelper() {}
+type Next<C> = (ctx: C) => Promise<void>;
+type Middleware<C> = (ctx: C, next: Next<C>) => Promise<void>;
+
+const app = compose<RequestContext>([
+  withAuth,
+  withLogging,
+  withErrorHandler,
+  handler,
+]);
+```
+
+Show the `compose` function, three sample middleware implementations, and proper TypeScript types that ensure the context is passed correctly through the chain.""",
+
+"""**Debug Scenario:**
+TypeScript's `strictFunctionTypes` causes surprising errors when assigning callback types in a React-like framework:
+
+```ts
+type EventHandler<E extends Event> = (event: E) => void;
+
+const handlers: EventHandler<Event>[] = [];
+const clickHandler: EventHandler<MouseEvent> = (e) => console.log(e.clientX);
+
+handlers.push(clickHandler); // Error: MouseEvent is not assignable to Event
+```
+
+This error blocks storing heterogeneous event handlers in an array. Explain the variance issue, show why `Function` or `any` are bad fixes, and design a correct type that allows storing handlers for different event types in the same array.""",
+
+"""**Task (Code Generation):**
+Build a `DeepReadonly<T>` utility type that makes all nested properties immutable, correctly handling edge cases:
+- Arrays → `ReadonlyArray`
+- Functions → unchanged (don't freeze functions)
+- `Map<K, V>` → `ReadonlyMap<K, V>`
+- `Set<T>` → `ReadonlySet<T>`
+- Primitive types → unchanged
+- Circular references → handled without infinite recursion
+
+Show the implementation and test cases for each edge case.""",
+
+"""**Debug Scenario:**
+A team uses declaration merging to extend a third-party `Config` interface. After upgrading the library, the merged interface has duplicate property conflicts.
+
+```ts
+// lib types:
+interface Config { timeout: number; }
+// local augmentation:
+declare module 'some-lib' {
+  interface Config { timeout: string; } // conflicts with number!
 }
 ```
 
-**Observed Issue:**
-TypeScript treats the imported binding and the local namespace declaration as a conflict in some configurations but merges them in others. The behavior changes with isolatedModules.
+TypeScript silently takes the local `timeout: string` definition, causing runtime errors because the library sends `timeout` as a number. Explain how TypeScript resolves interface merge conflicts, and propose a versioning strategy to detect these conflicts during upgrades.""",
 
-**Specific Ask:**
-When does TypeScript merge a namespace with an import vs. treat them as a conflict? How does isolatedModules change namespace declaration merging? What's the modern TypeScript recommendation -- avoid namespaces entirely in favor of ES modules, or are there valid use cases?""",
+"""**Task (Code Generation):**
+Implement a `StateMachine<States, Events>` type-safe class:
 
-"""**Context:**
-We use TypeScript path aliases in tsconfig.json for cleaner imports (@/components, @/lib). These work in the TypeScript compiler but break in Jest and sometimes in production builds.
+```ts
+const machine = new StateMachine({
+  initial: 'idle',
+  states: {
+    idle: { on: { START: 'loading' } },
+    loading: { on: { SUCCESS: 'done', FAILURE: 'error' } },
+    done: { on: { RESET: 'idle' } },
+    error: { on: { RETRY: 'loading', RESET: 'idle' } },
+  }
+});
 
-**Code:**
+machine.send('START'); // ok — transitions to 'loading'
+machine.send('SUCCESS'); // ok
+machine.send('START'); // TypeScript error: 'START' not valid in 'done' state
+```
+
+Make invalid transitions a compile-time error using template literal types and mapped types.""",
+
+"""**Debug Scenario:**
+A project uses `tsconfig.json` path aliases widely (`@/components`, `@/utils`). After setting up a monorepo with workspaces, the aliases break in cross-package imports — TypeScript can find types but the runtime module resolution fails.
+
 ```json
-// tsconfig.json
-{ "compilerOptions": { "paths": { "@/*": ["./src/*"] } } }
+// packages/app/tsconfig.json
+{ "paths": { "@/*": ["./src/*"] } }
+// packages/ui/index.ts imports from '@/components' ← breaks
 ```
 
-**Observed Issue:**
-TypeScript path aliases are a compile-time feature only. Jest uses Node.js module resolution which doesn't read tsconfig paths. Production builds that use webpack work fine but esbuild-based tools ignore paths.
+Explain the difference between TypeScript's `paths` (type resolution) and runtime module resolution (Node.js, Webpack, Jest), and show the correct tsconfig `references` + runtime alias setup for each tool.""",
 
-**Specific Ask:**
-What's the correct layered approach to make TypeScript path aliases work across tsc, Jest, webpack, esbuild, and Vitest without maintaining the same aliases in 4 different config files? Is there a single source-of-truth approach with tooling-specific adapters?""",
+"""**Task (Code Generation):**
+Implement a `useTypedReducer<S, A>` hook that wraps `useReducer` with exhaustive action type checking:
 
-"""**Context:**
-We're migrating a large JavaScript codebase to TypeScript and enabling strict mode incrementally. We start with "strict": false and enable flags one at a time.
+```ts
+type Action =
+  | { type: 'SET_LOADING'; payload: boolean }
+  | { type: 'SET_DATA'; payload: User[] }
+  | { type: 'SET_ERROR'; payload: string };
 
-**Observed Issue:**
-Enabling strictNullChecks causes 2,000+ type errors scattered across the codebase. Most are missing null checks on values that were always non-null in practice, but TypeScript can't prove it.
+const [state, dispatch] = useTypedReducer<State, Action>(reducer, initialState);
 
-**Specific Ask:**
-What's the most pragmatic incremental strategy for enabling strictNullChecks in a large codebase? Is the // @ts-expect-error approach to suppress errors temporarily better than as NonNullable<T> casts? How do you prioritize which files to fix first to maximize safety gains with minimum churn?""",
+dispatch({ type: 'SET_LOADING', payload: true }); // OK
+dispatch({ type: 'TYPO' }); // TypeScript Error
+```
 
-"""**Context:**
-We maintain an internal npm package and need to author its .d.ts declaration files correctly. The package has ESM and CJS builds with different entry points.
+Show the hook implementation and a `createReducer` helper that ensures all action types in the union are handled (exhaustive switch).""",
 
-**Code:**
-```json
-// package.json
-{
-  "exports": {
-    ".": { "import": "./dist/esm/index.js", "require": "./dist/cjs/index.js" }
-  },
-  "types": "./dist/types/index.d.ts"
+"""**Debug Scenario:**
+A TypeScript codebase has a utility function `assertNever(x: never): never` for exhaustive checks. After adding a new variant to a discriminated union, the compiler fails to error at the `assertNever` call as expected.
+
+```ts
+type Shape = Circle | Square | Triangle; // Triangle just added
+function area(s: Shape): number {
+  switch (s.kind) {
+    case 'circle': return Math.PI * s.r ** 2;
+    case 'square': return s.side ** 2;
+    default: return assertNever(s); // Should error but doesn't
+  }
 }
 ```
 
-**Observed Issue:**
-Consumers using moduleResolution: "bundler" pick up types correctly, but those using "node16" or "nodenext" get module not found errors when importing from sub-paths like @company/pkg/utils.
+TypeScript reports no error even though `Triangle` isn't handled. Diagnose why (hint: check the TypeScript version and `useUnknownInCatchVariables`) and fix the `assertNever` pattern to be reliable.""",
 
-**Specific Ask:**
-How do you correctly structure package.json exports and tsconfig for a dual ESM+CJS package that supports all TypeScript moduleResolution modes? Do you need separate .d.ts files for each export entry, and what's the typesVersions field for?""",
+"""**Task (Code Generation):**
+Build a `createStore<S>` function (like a tiny Zustand) with full TypeScript types:
 
-"""**Context:**
-We enabled exactOptionalPropertyTypes in tsconfig after upgrading to TypeScript 4.9. Build broke with 400+ new errors.
-
-**Code:**
 ```ts
-type Config = { timeout?: number };
-const config: Config = { timeout: undefined }; // Error with exactOptionalPropertyTypes
+const useStore = createStore<{ count: number; name: string }>((set) => ({
+  count: 0,
+  name: 'user',
+  increment: () => set(s => ({ count: s.count + 1 })),
+  setName: (name: string) => set({ name }),
+}));
+
+const count = useStore(s => s.count); // number
+const name = useStore(s => s.name);   // string
 ```
 
-**Observed Issue:**
-With exactOptionalPropertyTypes, { timeout: undefined } is no longer assignable to { timeout?: number } because optional means "may be absent" not "may be undefined". Our codebase frequently sets optional props to undefined explicitly.
+The selector must be typed correctly. Actions must be part of the store state type. Show a minimal but fully-typed implementation.""",
 
-**Specific Ask:**
-What's the semantic difference between key?: T and key?: T | undefined with exactOptionalPropertyTypes enabled? Is there a codemod or ESLint rule to automatically fix the explicit-undefined-on-optional pattern? And is this flag worth the migration pain for a large codebase?""",
+"""**Debug Scenario:**
+A team migrated from CommonJS to ESM. After the migration, `typeof require` checks that used to work break at type-checking time:
 
-"""**Context:**
-We're importing types from a third-party library in our component files. The linter flags that we should use type-only imports.
-
-**Code:**
 ```ts
-import { User, fetchUser } from '@company/api';
-// ESLint: 'User' is a type and should be imported using 'import type'
-```
-
-**Observed Issue:**
-We have hundreds of import statements that mix value and type imports. Splitting them into import type { User } and import { fetchUser } is tedious. We need to understand the actual runtime impact.
-
-**Specific Ask:**
-What's the runtime and bundle impact of importing types as values (not using import type)? Does TypeScript erase them at compile time anyway, making the lint rule cosmetic? Or are there cases where not using import type causes actual bundle bloat -- e.g., with bundlers that don't tree-shake type-only imports?""",
-
-
-"""**Context:**
-We need to extract the element type from an array type using the infer keyword inside a conditional type.
-
-**Code:**
-```ts
-type ElementOf<T> = T extends (infer U)[] ? U : never;
-type Str = ElementOf<string[]>; // string
-type Num = ElementOf<number[]>; // number
-```
-
-**Observed Issue:**
-The basic pattern works. But when we try to extract the element type from a nested Promise<Array<T>>, combining two infer keywords causes TypeScript to infer never.
-
-**Code:**
-```ts
-type AsyncArrayElement<T> =
-  T extends Promise<infer A>
-    ? A extends (infer U)[]
-      ? U
-      : never
-    : never;
-
-type Test = AsyncArrayElement<Promise<User[]>>; // should be User, gets never
-```
-
-**Specific Ask:**
-Why does chaining two separate conditional types with infer produce never here? Is there a single conditional type using both infer positions simultaneously (T extends Promise<(infer U)[]>) that works? And what's the difference between infer in a union-distributed context vs. a simple structural position?""",
-
-"""**Context:**
-We need to merge a class implementation with additional methods declared in an interface -- the classic declaration merging pattern for extending third-party classes.
-
-**Code:**
-```ts
-class EventEmitter {
-  on(event: string, handler: () => void) { ... }
-}
-
-// Attempt to add methods via declaration merging:
-interface EventEmitter {
-  once(event: string, handler: () => void): void;
+if (typeof require !== 'undefined') {
+  // CJS environment
+  const fs = require('fs');
 }
 ```
 
-**Observed Issue:**
-TypeScript allows this pattern (class + interface declaration merging), but the runtime implementation of once is missing. The type says it exists but calling it throws at runtime.
+TypeScript reports `'require' is not defined` because the tsconfig targets ESM. But the code needs to work in both CJS and ESM at runtime. Show how to correctly type-check dual-mode code and whether `import.meta.url` vs `__dirname` vs `createRequire` is the right cross-environment solution.""",
 
-**Specific Ask:**
-What is class + interface declaration merging in TypeScript -- does it merge only types or also implementations? What's the correct pattern to both declare and implement additional methods on a class that already exists (possibly from a third-party)? Is module augmentation with prototype assignment the runtime complement to declaration merging?""",
+"""**Task (Code Generation):**
+Implement `Prettify<T>`, `Exact<T, U>`, and `StrictOmit<T, K>` utility types:
+
+1. `Prettify<T>` — flattens intersections to show final shape in hover tooltips
+2. `Exact<T, U>` — ensures `T` has exactly the same keys as `U` (no extra, no missing)
+3. `StrictOmit<T, K>` — like `Omit` but `K` must be `keyof T` (unlike built-in Omit which allows non-existent keys)
+
+Show each implementation with examples demonstrating where the built-in utilities fall short.""",
+
+"""**Debug Scenario:**
+A TypeScript generic class uses `this` type for fluent method chaining. When the class is extended, the `this` type works but the constructor type inference breaks.
+
+```ts
+class QueryBuilder<T> {
+  where(condition: Partial<T>): this { return this; }
+  limit(n: number): this { return this; }
+}
+class UserQuery extends QueryBuilder<User> {
+  withActive(): this { return this.where({ active: true }); }
+}
+const q = new UserQuery().withActive().where({ name: 'Alice' }).limit(10);
+// q is typed as UserQuery ✓ (this typing works)
+
+// But:
+function buildQuery<T, Q extends QueryBuilder<T>>(Builder: new() => Q): Q {
+  return new Builder(); // Error: Cannot assign 'QueryBuilder<T>' to 'Q'
+}
+```
+
+Explain the constructor type inference limitation and fix `buildQuery` to correctly infer the specific subclass type.""",
+
+"""**Task (Code Generation):**
+Implement a type-safe HTTP client builder:
+
+```ts
+const client = createHttpClient('https://api.example.com')
+  .withAuth(token)
+  .withTimeout(5000)
+  .withRetry({ attempts: 3, backoff: 'exponential' });
+
+// Fully typed response:
+const { data } = await client.get<User[]>('/users');
+const { data: report } = await client.post<Report>('/reports', { title: 'Q1' });
+```
+
+Show the builder pattern implementation with TypeScript generics for the response type, and the `RequestConfig` type with all options.""",
+
+"""**Debug Scenario:**
+TypeScript's `keyof` produces a surprising union when applied to an interface with both string and number index signatures:
+
+```ts
+interface Dict {
+  [key: string]: unknown;
+  [key: number]: unknown;
+  name: string;
+}
+type K = keyof Dict; // string | number — NOT 'name' | string | number
+```
+
+Callers expected to use `'name'` as an autocomplete-able key, but it's swallowed by the index signature. Explain how index signatures affect `keyof`, and show how to design `Dict` so named properties remain discoverable while still supporting dynamic keys.""",
+
+"""**Task (Code Generation):**
+Implement a `zodToFormik` adapter that converts a Zod schema into a Formik initial values object and validation function:
+
+```ts
+const schema = z.object({
+  email: z.string().email(),
+  age: z.number().min(18),
+  role: z.enum(['admin', 'user']),
+});
+
+const { initialValues, validate } = zodToFormik(schema);
+// initialValues: { email: '', age: 0, role: 'admin' }
+// validate: (values) => errors object compatible with Formik
+```
+
+Show the recursive `getDefaultValue` for each Zod type and the `validate` adapter that converts Zod errors to Formik's nested error format.""",
+
+"""**Debug Scenario:**
+A codebase applies `readonly` to function parameters to prevent mutation. After enabling `strictFunctionTypes`, functions that accept `readonly` arrays can't be passed where mutable arrays are expected and vice versa.
+
+```ts
+function sum(nums: readonly number[]): number { ... }
+const data: number[] = [1, 2, 3];
+const result = sum(data); // OK ✓
+
+function mutate(nums: number[]): void { nums.push(4); }
+const frozen: readonly number[] = [1, 2, 3];
+mutate(frozen); // Error ✓ (correctly blocked)
+
+// But:
+type Transform = (nums: number[]) => number[];
+const safeTransform: (nums: readonly number[]) => readonly number[] = ...;
+const t: Transform = safeTransform; // Error? Or allowed?
+```
+
+Explain the covariance/contravariance rules that govern `readonly` array assignability.""",
+
+"""**Task (Code Generation):**
+Build a `createQueryKey` factory for React Query that generates type-safe, structured query keys:
+
+```ts
+const keys = createQueryKey('reports', {
+  list: (filter: ReportFilter) => [filter],
+  detail: (id: string) => [id],
+  comments: (reportId: string, page: number) => [reportId, page],
+});
+
+keys.list({ status: 'active' }); // ['reports', 'list', { status: 'active' }]
+keys.detail('123');               // ['reports', 'detail', '123']
+keys.all;                         // ['reports'] — invalidates everything
+```
+
+The return types must match what React Query expects for `queryKey`. Show the factory implementation with full TypeScript types.""",
+
+"""**Debug Scenario:**
+A Next.js project uses `ts-morph` to generate TypeScript types from a database schema at build time. The generated types are correct but `tsc` takes 45 seconds to type-check — up from 8 seconds before the generators were added.
+
+Investigation with `tsc --diagnostics` shows `checkTime` dominated by a single 8,000-line generated file with deeply nested conditional types.
+
+Explain TypeScript's type-checking complexity for conditional types (exponential in the worst case), and show how to restructure the generated types using interfaces + module augmentation instead of deeply nested conditionals to bring check time back to acceptable levels.""",
+
+"""**Task (Code Generation):**
+Implement a `parseCsv<T>` function using TypeScript template literal types to validate CSV headers at compile time:
+
+```ts
+const rows = parseCsv<{ name: string; age: number; email: string }>(
+  csvString,
+  { name: 'Name', age: 'Age (years)', email: 'Email Address' }
+); // rows: { name: string; age: number; email: string }[]
+```
+
+The column mapping must be checked: every key of `T` must appear in the mapping, and no extra keys allowed. The parser converts string columns to the appropriate TypeScript type (`string` → as-is, `number` → `parseFloat`).""",
+
+"""**Task (Code Generation):**
+Implement a `useZodForm` hook that bridges Zod schema inference with React state, providing type-safe form validation without a dedicated form library:
+
+```ts
+const { values, errors, handleChange, handleSubmit, isValid } = useZodForm(
+  z.object({
+    username: z.string().min(3).max(20),
+    email: z.string().email(),
+    age: z.number().min(18),
+  }),
+  { username: '', email: '', age: 0 }
+);
+// values.username is typed as string ✓
+// errors.email is typed as string | undefined ✓
+```
+
+Show: the hook implementation, how Zod's `safeParse` drives validation on submit, how to convert `ZodError.flatten()` into a flat `{[field]: string}` errors object, and the TypeScript generics that infer field names and types from the schema.""",
 
 ]

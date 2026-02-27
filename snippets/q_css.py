@@ -1,275 +1,356 @@
 """
-snippets/q_css.py - 28 CSS/Styling questions
+snippets/q_css.py — 28 FRESH CSS/Styling questions (mix of debugging + code generation)
+Zero overlap with archived set.
 """
 
 Q_CSS = [
 
-"""**Context:**
-We're migrating from CSS Modules to CSS-in-JS (styled-components) in our dashboard. The migration is incremental -- some components use styled-components, others still use CSS Modules.
+"""**Task (Code Generation):**
+Implement a pure CSS responsive card grid that:
+- Shows 1 column on mobile, 2 on tablet, 3 on desktop with NO media queries
+- Uses CSS Grid's `auto-fill` + `minmax` for intrinsic responsiveness
+- Cards have equal height per row (no orphan short cards)
+- Has a "featured" card variant that spans 2 columns on larger grids
+- Works with dynamic card count (0 to N cards)
 
-**Observed Issue:**
-Components using styled-components generate runtime class names that occasionally conflict with static CSS Module class names when both systems are active simultaneously. The cascade order is unpredictable.
+Show the CSS and explain why `auto-fill` vs `auto-fit` behaves differently when there are fewer items than columns.""",
 
-**Specific Ask:**
-How do you safely run CSS-in-JS and CSS Modules simultaneously during an incremental migration? Is CSS @layer the mechanism that gives you deterministic cascade ordering between the two systems? What's the correct migration order to minimize conflicts -- migrate leaf components first or page-level components?""",
+"""**Debug Scenario:**
+A sticky table header stops being sticky when the parent container has `overflow: auto`. The header is set to `position: sticky; top: 0` but scrolls with the content instead of sticking.
 
-"""**Context:**
-Our DataTable has sticky first column and sticky header row. The sticky column needs to show a subtle drop shadow when the table is scrolled horizontally.
-
-**Observed Issue:**
-We apply box-shadow to the sticky column. The shadow is clipped to the table cell's box -- it doesn't visually overlay the adjacent scrolling cell as expected. overflow: hidden on the parent clips the shadow.
-
-**Specific Ask:**
-How do you apply a custom scroll-position-dependent shadow to a sticky element without box-shadow being clipped? Is a ::after pseudo-element with opacity transition the right approach? Can CSS scroll-driven animations (@keyframes with animation-timeline: scroll()) eliminate the JavaScript scroll listener approach?""",
-
-"""**Context:**
-We need to detect when a card component exceeds its container width and apply an overflow layout. Currently this is done with a ResizeObserver in JavaScript that adds a data attribute.
-
-**Observed Issue:**
-The JS ResizeObserver approach adds a frame of layout shift before the compact layout applies, causing visual flicker.
-
-**Specific Ask:**
-Does CSS Container Queries (@container, inline-size) eliminate the need for ResizeObserver-based layout switching? At what browser support level is it safe to ship @container queries for a B2B SaaS without a polyfill? What's the fallback strategy for browsers that don't support @container?""",
-
-"""**Context:**
-Our design system uses CSS custom properties (variables) for design tokens. The theme (light/dark) is switched by swapping a data-theme attribute on the root element.
-
-**Observed Issue:**
-Our CSS variables are defined in separate light.css and dark.css files. When the data-theme switches, there's a 1-frame flash before the browser repaints with the new theme values.
-
-**Specific Ask:**
-Is the 1-frame theme flash inherent to class/attribute-based CSS custom property switching, or is there a mechanism to make theme changes synchronous with the attribute change? Does defining both themes in a single stylesheet with [data-theme='dark'] selectors eliminate the flash vs. loading separate CSS files?""",
-
-"""**Context:**
-We're building a complex dashboard grid layout: a fixed sidebar, a top navigation, and a scrollable content area. The content area has a sub-grid for responsive widget placement.
-
-**Observed Issue:**
-We started with CSS Grid for the outer layout and Flexbox for inner widgets. As requirements add nested responsive behaviors, we're mixing Grid, Flexbox, and absolute positioning in ways that are hard to reason about.
-
-**Specific Ask:**
-What's the modern CSS layout model for a dashboard with a fixed chrome (sidebar, nav) and a scrollable, responsive main area? Is CSS Subgrid (grid-template-columns: subgrid) necessary for aligning nested widget columns to the outer grid, or is Subgrid still too early for production? What's the equivalent Flexbox-only pattern?""",
-
-"""**Context:**
-We have a text truncation issue. Report titles in our table are truncated with text-overflow: ellipsis. Single-line truncation works fine, but we need to truncate at exactly 2 lines.
-
-**Observed Issue:**
-display: -webkit-box with -webkit-line-clamp: 2 works in modern browsers. But we're seeing layout shifts in Chromium when the container is inside a CSS Grid or Flexbox item -- the clamped element collapses to 0 height.
-
-**Specific Ask:**
-What are the known layout interactions between -webkit-line-clamp and CSS Grid/Flexbox that cause height collapse? Is the fix a min-height on the text container, or wrapping the clamped text in a block with overflow: hidden and a fixed height? And has the standardized line-clamp property been shipped in any browsers?""",
-
-"""**Context:**
-We need to implement a responsive sidebar that: (1) is fixed on desktop, (2) overlays as a drawer on mobile, and (3) can be toggled by the user on tablets. The sidebar contains long navigation lists and must be fully accessible.
-
-**Observed Issue:**
-Our current implementation uses different components for mobile (drawer) and desktop (fixed sidebar). Managing two separate component instances causes state duplication and a11y issues (two sets of nav links in the accessibility tree).
-
-**Specific Ask:**
-What's the correct CSS architecture for a single sidebar component that behaves as a fixed column on desktop and a drawer overlay on mobile? How do you use CSS Custom Properties + media queries to switch between the two modes without duplicating the DOM? And how do you handle focus trapping correctly for the drawer mode without affecting desktop mode?""",
-
-"""**Context:**
-We use CSS animations for loading skeletons across our whole dashboard. The skeleton shimmer is a gradient that slides across the element.
-
-**Observed Issue:**
-With 50+ skeleton elements visible simultaneously (a full dashboard load), each running its own CSS animation, the CPU usage in the Chrome Performance panel is high and we see frame drops on lower-end devices.
-
-**Specific Ask:**
-Why do 50 simultaneous CSS animations cause high CPU usage even though CSS animations are supposed to be GPU-composited? Is the issue that background-position animation isn't compositable (only transform and opacity are)? What's the correct performant shimmer approach -- only animating transform/opacity, or using a single shared animation via a pseudo-element?""",
-
-"""**Context:**
-Our design system buttons have a complex hover/focus/active state chain. We use :is() and :where() selectors in the design system's base CSS.
-
-**Observed Issue:**
-:is() carries the specificity of its most specific argument. Our use of :is(button, .btn, [role='button']) with a class selector makes the entire rule have specificity 0-1-0, overriding our more specific component styles.
-
-**Specific Ask:**
-Explain the specificity difference between :is(), :where(), and :not() selectors. When should :where() be preferred for design-system base styles to avoid specificity creep? And what's the impact of using :has() (which follows :is() specificity rules) for parent selection in a design system context?""",
-
-"""**Context:**
-We're implementing a print view for financial reports. The report is 3-5 pages when printed. Page breaks appear in the middle of financial tables, splitting rows across pages.
-
-**Observed Issue:**
-We have no @media print styles controlling page breaks. CSS properties page-break-inside: avoid and break-inside: avoid exist but aren't consistently applied.
-
-**Specific Ask:**
-What's the complete CSS approach for controlling page breaks in a printable financial table? Does break-inside: avoid on rows reliably prevent row splitting across pages in Chrome, Safari, and Firefox? And how do you add print-specific headers/footers (page numbers, report title) without JavaScript -- only using CSS @page rules?""",
-
-"""**Context:**
-We need to implement a masonry layout for a report card grid (variable height cards arranged in columns that fill space without gaps).
-
-**Observed Issue:**
-CSS Grid doesn't natively support masonry layout (all rows have equal height). We're using a JavaScript column-balancing approach that recalculates positions on every resize. But the JS approach causes layout shift on initial render.
-
-**Specific Ask:**
-Does CSS masonry layout (grid-template-rows: masonry) have browser support yet, or is it still experimental? What's the best CSS-only approximation for masonry that works today -- CSS columns property, or a Flexbox column-direction approach? What are the tab-order and accessibility implications of column-direction Flexbox masonry?""",
-
-"""**Context:**
-We have a form with labeled input fields. The label and input should align to a grid, and each label should be text-overflow: ellipsis width-responsive.
-
-**Observed Issue:**
-The label text wraps instead of truncating because text-overflow: ellipsis requires overflow: hidden and a fixed width or max-width, but inside a Grid cell the label wants to expand to its content.
-
-**Specific Ask:**
-How do you achieve text-overflow: ellipsis on a Grid child that should respect the grid's track sizes, without a fixed width? Is the fix min-width: 0 on the grid cell (overriding the default min-width: auto that allows expansion)? What's the interaction between min-width: 0 and grid-template-columns: auto 1fr for a form layout?""",
-
-"""**Context:**
-We have a card component with a fixed aspect ratio (16:9) that should maintain its ratio on all screen sizes. Inside the card is an absolutely positioned overlay.
-
-**Observed Issue:**
-We used padding-top: 56.25% (16:9 hack) with position: relative + absolute child. On some configurations the card height collapses because a parent has display: flex.
-
-**Specific Ask:**
-Does the aspect-ratio CSS property (aspect-ratio: 16/9) replace the padding-top hack reliably in 2024 browsers? What's the interaction between aspect-ratio and Flexbox/Grid parent sizing? And does aspect-ratio work correctly when combined with max-height constraints?""",
-
-"""**Context:**
-Our dashboard uses CSS Modules for component styles. We want to add global utility classes (.sr-only, .visually-hidden) that components can reference without importing a module.
-
-**Observed Issue:**
-Global styles added to global.css are available. But in CSS Modules files, composes: from global only works for classes defined in global CSS Modules files, not plain global.css. Components that use composes get scoped class names, which breaks the global utility purpose.
-
-**Specific Ask:**
-What's the correct way to use global utility classes (like Tailwind's sr-only pattern) alongside CSS Modules without losing scoping benefits elsewhere? Is :global(.sr-only) the mechanism for referencing global classes from a CSS Module? And how do you ensure global utility classes aren't accidentally scoped when the CSS Modules transform runs?""",
-
-"""**Context:**
-We need to implement a tooltip that positions itself to always stay within the viewport -- flipping from bottom to top if there's insufficient space below the trigger.
-
-**Observed Issue:**
-Our original approach used getBoundingClientRect() + scroll offsets in JavaScript. This requires a layout read on every scroll/resize. Our new attempt uses CSS only, but we can't find a CSS mechanism to conditionally flip placement.
-
-**Specific Ask:**
-Does the CSS Anchor Positioning API (position-anchor, @position-fallback) solve the viewport-aware tooltip placement problem natively? At what browser support level is it safe to use without a JavaScript polyfill? What's the Popper.js/Floating UI tradeoff vs. native CSS anchor positioning for a tooltip system?""",
-
-"""**Context:**
-Our design token CSS variables use hsl() values throughout. We're adding a color contrast accessibility feature that generates a high-contrast variant of each color token.
-
-**Observed Issue:**
-Generating a high-contrast variant requires knowing the relative luminance of each color. This is mathematically complex in CSS without CSS Color Level 5 functions. Currently we pre-compute all high-contrast variants at build time.
-
-**Specific Ask:**
-What CSS Color Level 5 features (color-contrast(), color-mix(), relative color syntax) are available in browsers today that could help with dynamic contrast generation? Can CSS color-mix(in oklch, ...) be used to lighten/darken tokens at runtime without pre-computing all variants? And how should we design our CSS custom property naming convention to support theming across normal, dark, and high-contrast?""",
-
-"""**Context:**
-We're adding a smooth page transition animation when navigating between routes in our Next.js 14 App Router. We want a slide/fade effect when navigating between dashboard sections.
-
-**Observed Issue:**
-Next.js App Router manages its own navigation lifecycle. Using CSS transitions on route changes is non-trivial because the new page renders immediately, replacing the old one.
-
-**Specific Ask:**
-How do you implement page transition animations in Next.js 14 App Router without Framer Motion? Does the View Transitions API (document.startViewTransition) work with Next.js App Router's client-side navigation? What are the browser support constraints, and what's the recommended pattern for graceful degradation when the View Transitions API isn't available?""",
-
-"""**Context:**
-Our dashboard table has 50 rows with alternating row colors (zebra striping). We implement this with nth-child(even).
-
-**Observed Issue:**
-When rows are dynamically reordered (sort), the nth-child positions don't change (they're DOM position-based), so stripes remain correct. But when a filter hides some rows (display: none), the nth-child numbering skips hidden rows incorrectly, producing uneven stripes.
-
-**Specific Ask:**
-How does nth-child count work with hidden (display: none) vs. invisible (visibility: hidden) elements -- does it count them? Is :nth-child(even of .visible-row) (the of selector syntax) the CSS-only fix for filtered zebra stripes? What's the browser support for the of selector syntax in nth-child?""",
-
-"""**Context:**
-We have a custom focus ring for our design system. The default browser ring is removed (outline: none) and replaced with a custom box-shadow focus ring.
-
-**Observed Issue:**
-Our custom focus ring doesn't appear when navigating with a keyboard in Safari. It works in Chrome and Firefox.
-
-**Specific Ask:**
-What are the cross-browser differences in :focus vs. :focus-visible behavior? Does Safari implement :focus-visible? How do you write a universal focus ring that appears for keyboard navigation (using :focus-visible) but not mouse click (using :not(:focus-visible)), consistently across Chrome, Firefox, and Safari?""",
-
-"""**Context:**
-We use CSS Grid's auto-fill and auto-fit for our responsive card grid. The cards should be minimum 280px wide and fill the available space.
-
-**Code:**
 ```css
-grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+.table-wrapper { overflow: auto; } /* breaks sticky */
+.table-header { position: sticky; top: 0; }
 ```
 
-**Observed Issue:**
-When the container is exactly 560px wide, two columns appear. When it's 559px, one column appears. But at 840px, three cards appear -- the first two are wider than 1fr average because auto-fill creates an empty invisible track.
+Explain why `overflow: auto/scroll/hidden` on a parent creates a new scroll container and breaks `position: sticky`. Show the correct architecture for a scrollable table with a sticky header that doesn't require JavaScript positioning.""",
 
-**Specific Ask:**
-Explain the difference between auto-fill (creates empty tracks) and auto-fit (collapses empty tracks) in this context. At 840px with minmax(280px, 1fr), how many tracks does each create and how wide are they? Which is correct for a card grid that should always stretch to fill available width without empty ghost columns?""",
+"""**Task (Code Generation):**
+Build a CSS-only dark mode theme system for a Next.js app using CSS custom properties (no Tailwind, no CSS-in-JS):
 
-"""**Context:**
-We've added CSS Layers (@layer) to our design system to control cascade order: @layer base, components, utilities. But component styles defined with @layer components are being overridden by old styles in a legacy stylesheet that doesn't use @layer.
-
-**Observed Issue:**
-Unlayered (non-@layer) styles always win over layered styles, regardless of layer order. The legacy stylesheet has no @layer declarations, so its styles defeat our new component layer.
-
-**Specific Ask:**
-Explain the cascade priority of layered vs. unlayered styles in CSS. Is the only fix to wrap the legacy stylesheet in a low-priority @layer (e.g., @layer legacy) to explicitly place it below component layer? What's the migration strategy for a codebase that has a mix of layered and unlayered CSS?""",
-
-"""**Context:**
-We're implementing a dark mode toggle for our dashboard. We detect system preference via prefers-color-scheme and allow user override stored in localStorage.
-
-**Observed Issue:**
-Using only CSS prefers-color-scheme (no user override) causes no JavaScript flash. Adding user override (read localStorage in JS, set data-theme attribute) causes a flash before JS hydrates.
-
-**Specific Ask:**
-What's the optimal dark mode implementation that supports both system preference detection and user override with zero flash? Does the "inline script before DOM renders" approach fully eliminate the flash, and is it compatible with Next.js 14 App Router's streaming HTML? How does next-themes solve this, and can you replicate its approach without the library?""",
-
-"""**Context:**
-We're implementing a CSS-only accordion (expand/collapse sections) without JavaScript, using the details/summary HTML elements.
-
-**Observed Issue:**
-The native details/summary accordion animation (height transition) doesn't work because height: auto can't be transitioned in CSS. The section snaps open/closed without animation.
-
-**Specific Ask:**
-What's the current CSS-only approach to animate height from 0 to auto (or auto to 0)? Does the new CSS @starting-style rule + transition: display combination solve this in 2024? What's the grid-rows: 0fr to 1fr animation trick, and does it work for arbitrary content heights inside details/summary?""",
-
-"""**Context:**
-Our chart tooltips use position: absolute inside a position: relative chart wrapper. Tooltips near the chart edges get clipped by the chart container's overflow: hidden.
-
-**Observed Issue:**
-The chart needs overflow: hidden to handle dynamic resizing. But this clips absolute-positioned tooltips.
-
-**Specific Ask:**
-What are the options for rendering absolutely-positioned tooltips that can overflow their parent without removing overflow: hidden from the parent? Does the CSS position: fixed tooltip approach work correctly inside a CSS transform parent, or does transform create a containing block that breaks fixed positioning? Is using a React Portal (render tooltip outside chart wrapper) the correct solution here?""",
-
-"""**Context:**
-We have a sticky header in our dashboard. The header uses position: sticky with top: 0. On iOS Safari it doesn't behave correctly -- it's not sticky at all on initial load, then sticks after the first scroll, and sometimes flickers.
-
-**Observed Issue:**
-iOS Safari has known issues with position: sticky on elements inside overflow: auto or overflow: scroll parents. The sticky element's ancestor chain must not have overflow (other than visible).
-
-**Specific Ask:**
-What are the exact rules for position: sticky to work correctly across browsers, specifically regarding overflow on ancestor elements? On iOS Safari, what's the minimal change required to make a sticky header work reliably? And what's the behavior difference between Safari's sticky and Chrome's when inside a CSS transformation context?""",
-
-"""**Context:**
-We're adding CSS scroll snapping to our dashboard's onboarding carousel. Items slide one at a time, snapping to each card.
-
-**Code:**
 ```css
-.carousel {
-  overflow-x: scroll;
-  scroll-snap-type: x mandatory;
+:root { --color-bg: #ffffff; --color-text: #1a1a1a; }
+[data-theme="dark"] { --color-bg: #0f0f0f; --color-text: #f0f0f0; }
+```
+
+Requirements:
+- Respects `prefers-color-scheme: dark` by default (no JS needed)
+- Can be overridden by user preference (stored in a `data-theme` attribute on `<html>`)
+- No Flash Of Unstyled Content (FOUC) when the user's preference loads
+- Shows how to apply the CSS variables to Next.js's `<body>` without hydration mismatch""",
+
+"""**Debug Scenario:**
+A loading spinner animation (`@keyframes` rotation) causes the entire page to jank every frame on a mid-tier Android device. Chrome DevTools Performance tab shows the animation is on the main thread, not the compositor.
+
+```css
+.spinner {
+  animation: spin 1s linear infinite;
 }
-.carousel-item {
-  scroll-snap-align: start;
+@keyframes spin {
+  from { transform: rotate(0deg) translateX(10px); } /* ← problem */
+  to { transform: rotate(360deg) translateX(10px); }
 }
 ```
 
-**Observed Issue:**
-On iOS Chrome, scroll snap works correctly. On Android Chrome, snap points are inconsistent -- the carousel sometimes stops between items, especially when swiping quickly.
+Explain why `transform` animations should be GPU-composited but this specific animation isn't, and rewrite it to animate only compositor-friendly properties.""",
 
-**Specific Ask:**
-What's the difference between scroll-snap-type: x mandatory and scroll-snap-type: x proximity for mobile performance? Does scroll-snap-stop: always prevent fast-swipe skipping over snap points? And what touch event behaviors (overscroll-behavior, touch-action) interact with CSS scroll snapping in ways that cause inconsistent behavior on Android?""",
+"""**Task (Code Generation):**
+Implement a responsive typography system using CSS `clamp()` for fluid font sizes:
 
-"""**Context:**
-Our dashboard's responsive design breaks at one specific breakpoint: the sidebar and main content overlap when the viewport is exactly 1024px.
+```css
+/* Font scale that smoothly transitions between mobile and desktop breakpoints */
+--text-sm: clamp(0.875rem, 0.8rem + 0.375vw, 1rem);
+--text-base: clamp(1rem, 0.9rem + 0.5vw, 1.125rem);
+--text-xl: clamp(1.25rem, 1rem + 1.25vw, 1.875rem);
+--text-4xl: clamp(2rem, 1.5rem + 2.5vw, 3.5rem);
+```
 
-**Observed Issue:**
-We have a media query for min-width: 1025px (desktop) and max-width: 1023px (tablet). At exactly 1024px no query applies and the layout reverts to its base styles, which causes an overlap.
+Show how to calculate the `clamp()` values for any font size/viewport range using a formula, implement an 8-level type scale, and explain when fluid typography is better vs worse than breakpoint-based sizing.""",
 
-**Specific Ask:**
-Why is there a gap at exactly 1024px in this breakpoint setup? What's the correct exclusive breakpoint pattern to eliminate gaps (min-width: 1024px for desktop, max-width: 1023.98px for tablet)? And what's the CSS spec behavior for media queries at exactly the boundary value -- is it inclusive or exclusive?""",
+"""**Debug Scenario:**
+A CSS Grid layout has items that overflow their cells horizontally on Firefox but not Chrome. The cells have `min-width: 0` but child elements with `white-space: nowrap` cause overflow.
 
-"""**Context:**
-Our design system uses a t-shirt sizing scale for spacing: xs (4px), sm (8px), md (16px), lg (24px), xl (32px). But we want the spacing to scale proportionally on larger displays.
+```css
+.grid { display: grid; grid-template-columns: 1fr 1fr; }
+.cell { min-width: 0; overflow: hidden; }
+.content { white-space: nowrap; } /* overflows in Firefox */
+```
 
-**Observed Issue:**
-Fixed px values mean xs is always 4px on a 4K display. The design should feel proportional at any viewport size without needing dozens of breakpoint overrides.
+Explain the browser difference in how `min-width: 0` interacts with `1fr` columns between Chrome and Firefox. Show additional CSS needed to contain the overflow and why `text-overflow: ellipsis` requires an additional `display: block` in some browsers.""",
 
-**Specific Ask:**
-What's the approach for fluid spacing scales in CSS? Does clamp(min, preferred, max) with vw units work for spacing tokens, or is it better suited for typography? What's the mathematical relationship between fluid type (clamp with vw) and fluid spacing to maintain proportional visual rhythm across viewport sizes?""",
+"""**Task (Code Generation):**
+Build a CSS scroll-driven animation (no JavaScript) that:
+- Reveals a progress bar at the top of the page as the user scrolls
+- Fades in section headings as they enter the viewport
+- Applies a parallax effect to a hero image
+
+Use the CSS `@scroll-timeline` / `scroll()` and `view()` animation timeline features. Show browser support fallbacks using `@supports` and a JavaScript `IntersectionObserver` fallback for browsers that don't support scroll-driven animations.""",
+
+"""**Debug Scenario:**
+A user reports that on their high-contrast Windows system, the app's custom checkbox styles are invisible. Custom checkboxes use `appearance: none` to replace the native checkbox with a CSS-only design.
+
+```css
+input[type="checkbox"] {
+  appearance: none;
+  width: 16px;height: 16px;
+  background: white;
+  border: 2px solid #666;
+}
+```
+
+Explain Windows High Contrast Mode (now called "Forced Colors Mode") and how it overrides custom CSS colors with system colors. Show how to use `@media (forced-colors: active)` to restore checkbox visibility.""",
+
+"""**Task (Code Generation):**
+Implement a CSS-only accordion component (no JavaScript) that:
+- Expands/collapses panel content
+- Animates height from 0 to auto (CSS-only, no fixed heights)
+- Has smooth easing for open and close
+- Works with keyboard navigation (tab/enter)
+- Maintains accessibility (aria-expanded, aria-controls)
+
+Use the HTML `<details>` + `<summary>` elements with CSS `::details-content` or a checkbox hack as fallback. Show both approaches and their accessibility tradeoffs.""",
+
+"""**Debug Scenario:**
+A CSS Grid dashboard layout breaks on a 1280px viewport — a column appears to be 10px narrower than expected, causing a horizontal scrollbar.
+
+The grid is:
+```css
+.grid {
+  display: grid;
+  grid-template-columns: 240px 1fr;
+  gap: 20px;
+  padding: 20px;
+}
+```
+
+On a 1280px container, `240 + 20 (gap) + 40 (padding) = 300px` leaves `980px` for `1fr`. But the horizontal scrollbar appears at exactly 1280px viewport. Investigate: is this a scrollbar width issue (scrollbar takes 15px, making the viewport 1265px), a box-sizing issue, or a `vw` vs `%` width issue?""",
+
+"""**Task (Code Generation):**
+Build a design token system using CSS custom properties with TypeScript type safety:
+
+```ts
+// tokens.ts → generates tokens.css
+const tokens = defineTokens({
+  colors: {
+    primary: { 50: '#eff6ff', 500: '#3b82f6', 900: '#1e3a8a' },
+    neutral: { 100: '#f5f5f5', 900: '#171717' },
+  },
+  spacing: { 1: '4px', 2: '8px', 4: '16px', 8: '32px' },
+  radii: { sm: '4px', md: '8px', full: '9999px' },
+});
+
+type ColorToken = typeof tokens.colors; // Type-safe color access
+```
+
+Show the `defineTokens` function, the CSS variable name generation (`--color-primary-500`), and a TypeScript-typed `token()` helper for use in styled-components or vanilla-extract.""",
+
+"""**Debug Scenario:**
+A CSS animation using `transform: scale()` on a card component causes sibling cards to shift/relayout on every frame. The animation is supposed to be GPU-composited and not affect layout.
+
+```css
+.card:hover {
+  animation: pulse 1s infinite;
+}
+@keyframes pulse {
+  50% { transform: scale(1.05); }
+}
+```
+
+Despite `transform` not affecting layout, siblings are shifting. Diagnose: is this a `transform-origin` issue (the card expands into sibling space), a `box-shadow` side-effect, or a `border-width` animation that accidentally crept in? Show the fix using `outline` instead of shadow animation.""",
+
+"""**Task (Code Generation):**
+Implement CSS Layers (`@layer`) to manage specificity in a Next.js app that combines:
+- A third-party component library (high specificity utility classes)
+- Global CSS resets
+- App-specific component styles
+- Utility classes
+
+```css
+@layer reset, base, components, utilities, overrides;
+```
+
+Show how to assign each style source to a layer, how layer order determines specificity (not selector specificity), and a concrete example where layers solve a conflict that `!important` would otherwise require.""",
+
+"""**Debug Scenario:**
+A `<Tabs>` component has active tab indicator that uses an animated underline. The underline animates smoothly between tabs on Chromium but snaps instantly on Safari, ignoring the CSS transition.
+
+```css
+.tab-indicator {
+  position: absolute;
+  bottom: 0;
+  left: var(--indicator-left);
+  width: var(--indicator-width);
+  transition: left 0.3s ease, width 0.3s ease;
+}
+```
+
+`--indicator-left` is a CSS custom property updated via inline styles. Explain why CSS transitions don't animate CSS custom property changes in older Safari, and show the alternative: using `transform: translateX()` (which does animate) instead of `left`.""",
+
+"""**Task (Code Generation):**
+Build a composable CSS utility class system (Tailwind-inspired) for a design system WITHOUT Tailwind:
+
+```css
+/* Generated utilities: */
+.p-4 { padding: 1rem; }
+.text-primary-500 { color: var(--color-primary-500); }
+.flex { display: flex; }
+.gap-2 { gap: 0.5rem; }
+```
+
+Show a Node.js build script that generates utility classes from the design token system, a PostCSS plugin that tree-shakes unused utilities by scanning JSX files, and how to scope utilities to avoid conflicts with third-party styles using CSS Layers.""",
+
+"""**Debug Scenario:**
+A multi-column CSS layout using `column-count: 3` breaks newspaper-style columns by orphaning a heading at the bottom of one column, separated from its content which flows into the next column.
+
+```css
+.content { column-count: 3; column-gap: 2rem; }
+h2 { /* heading at bottom of column, content in next */ }
+```
+
+Show the CSS `break-after`, `break-before`, and `break-inside: avoid` properties that control column breaks, and explain why `page-break-*` is the legacy equivalent. Also show `column-span: all` for full-width elements inside a multi-column layout.""",
+
+"""**Task (Code Generation):**
+Implement a CSS-only skeleton loading animation for a card grid:
+
+```html
+<div class="card skeleton">
+  <div class="skeleton-image"></div>
+  <div class="skeleton-title"></div>
+  <div class="skeleton-text"></div>
+</div>
+```
+
+Requirements:
+- Shimmer animation using `linear-gradient` + CSS animation (no JS)
+- Respects `prefers-reduced-motion: reduce` (stops animation for accessibility)
+- Matches the exact dimensions of real content (prevents layout shift when content loads)
+- Works in both light and dark mode using CSS variables
+
+Show the complete CSS.""",
+
+"""**Debug Scenario:**
+A `position: fixed` element (a cookie banner) is appearing behind a modal overlay on iOS Safari. Both elements are in the same stacking context. The modal has `z-index: 1000` and the banner has `z-index: 999`.
+
+On desktop Chrome the layering is correct. On iOS Safari, the banner appears on top despite lower z-index.
+
+Diagnose iOS Safari's stacking context behavior with `-webkit-overflow-scrolling: touch` and show the fix. Explain why iOS Safari creates new stacking contexts for `-webkit-overflow-scrolling` elements and which properties trigger this.""",
+
+"""**Task (Code Generation):**
+Build a theme switcher component that supports light, dark, and system themes with no flash on page load:
+
+Requirements:
+- Theme preference stored in localStorage
+- On first paint, reads localStorage synchronously via an inline `<script>` in `<head>` (before React hydrates)
+- Applies theme by setting `data-theme` on `<html>` element
+- Falls back to `prefers-color-scheme` if no localStorage preference
+- TypeScript hook `useTheme()` returns current theme and a `setTheme` function
+
+Show the inline script, the Next.js `<head>` integration, and the React hook.""",
+
+"""**Debug Scenario:**
+A complex CSS animation involving multiple `@keyframes` runs smoothly in Chrome DevTools but shows choppy frame drops when the browser tab is in the background and returns to foreground.
+
+Explain what happens to `requestAnimationFrame` and CSS animations when a browser tab is backgrounded (throttled to 1fps in most browsers), and how to correctly pause and resume animations using `animation-play-state` combined with the Page Visibility API. Show the JavaScript + CSS combination.""",
+
+"""**Task (Code Generation):**
+Implement a responsive data table with CSS that handles:
+- Horizontal scrolling on mobile devices
+- A frozen (sticky) first column for row labels
+- Alternating row colors
+- Highlighted "active" row
+- Column sorting indicator (CSS-only arrow icons)
+
+```html
+<div class="table-container">
+  <table class="data-table">...</table>
+</div>
+```
+
+Show the complete CSS for all requirements and explain the `overscroll-behavior` property for mobile horizontal scroll containment.""",
+
+"""**Debug Scenario:**
+A CSS animation using `clip-path` to reveal content is causing layout invalidation on every frame in the Chrome Performance panel. The `clip-path` changes from `inset(100% 0 0 0)` to `inset(0 0 0 0)`.
+
+```css
+@keyframes reveal {
+  from { clip-path: inset(100% 0 0 0); }
+  to { clip-path: inset(0 0 0 0); }
+}
+```
+
+Determine if `clip-path` animation is compositor-friendly (runs off main thread). Explain which `clip-path` shapes trigger layout/paint vs. which only trigger composite, and show how to profile this in Chrome's Layers panel. Offer an alternative approach using `transform: translateY` + `overflow: hidden` parent.""",
+
+"""**Task (Code Generation):**
+Implement a masonry layout in CSS (Pinterest-style) that works without JavaScript for item placement:
+
+Approach 1: CSS Grid with `grid-template-rows: masonry` (Firefox experimental)
+Approach 2: CSS Multi-column layout
+Approach 3: CSS Flexbox with column direction
+
+Show all three approaches, their browser support, and the tradeoff: Approach 3 (flexbox columns) forces reading-order to go top-to-bottom per column instead of left-to-right per row. How do you fix the reading order while maintaining visual masonry?""",
+
+"""**Debug Scenario:**
+A production dashboard's CSS animations are smooth in development but stutter in production. Bundle analysis shows the CSS for animations is the same in both environments. Chrome DevTools shows the production build has significantly more painted layers.
+
+The production build uses CSS Modules with class name shortening (`_a13x4`, `_b5k2z`, etc.) — these short class names collide with CSS Modules from different components, causing unintended style sharing between components.
+
+Verify this diagnosis: show how CSS Module name hashing works, why short hashes increase collision probability, and how to configure CSS Modules to use longer hashes with the file path included.""",
+
+"""**Task (Code Generation):**
+Build a CSS-in-JS alternative using the CSS Houdini Paint API to draw custom borders:
+
+```css
+.card {
+  --border-radius: 8px;
+  --border-color: blue;
+  --border-width: 2px;
+  border: none;
+  background: paint(fancy-border);
+}
+```
+
+Show the Paint Worklet JavaScript (runs in the browser's paint thread), how to register it with `CSS.paintWorklet.addModule()`, how to pass CSS custom properties to the worklet, and the browser support status with a CSS fallback.""",
+
+"""**Debug Scenario:**
+A `::before` pseudo-element is used to add decorative content to a component. The pseudo-element appears in Chrome but is missing in Firefox and Safari. The component uses CSS Modules.
+
+```css
+/* card.module.css */
+.card::before {
+  content: '';
+  display: block;
+  height: 4px;
+  background: linear-gradient(to right, blue, purple);
+}
+```
+
+Investigation shows the CSS compiles correctly. The `.card` class is applied. DevTools in Firefox shows the `::before` rule matched but the element is not rendering. What are the common reasons a `::before` pseudo-element renders in Chrome but not in Firefox/Safari, and how do you systematically debug pseudo-element rendering?""",
+
+"""**Task (Code Generation):**
+Create a complete print stylesheet for a Next.js dashboard report page that:
+- Hides navigation, sidebar, action buttons, and tooltips
+- Shows a print-only header with the company logo and report title
+- Breaks pages at sensible points (between sections, not mid-table)
+- Forces black-and-white printing for charts (replaces colors with patterns)
+- Shows URLs next to all links
+- Uses `cm`/`mm` units for print layout (not `px`)
+
+Show the CSS `@media print` stylesheet and how to apply it in Next.js's App Router without affecting screen styles.""",
+
+"""**Task (Code Generation):**
+Implement a CSS logical properties migration for an existing RTL (right-to-left) language support project. The existing codebase uses physical properties (`margin-left`, `padding-right`, `border-left`, `float: left`).
+
+```css
+/* Before (physical): */
+.nav { margin-left: auto; border-right: 1px solid; }
+/* After (logical): */
+.nav { margin-inline-start: auto; border-inline-end: 1px solid; }
+```
+
+Show:
+1. The mapping table: physical → logical property equivalents
+2. A PostCSS plugin configuration (`postcss-logical`) that auto-converts physical to logical
+3. How to test RTL layout using Chrome DevTools' forced RTL direction
+4. Which properties have no logical equivalent and need manual handling (e.g., `float`)""",
 
 ]

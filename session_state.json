@@ -1,464 +1,16 @@
 {
   "available": [
     [
-      "css_rendering",
-      "27"
-    ],
-    [
-      "architecture",
-      "5"
-    ],
-    [
-      "typescript",
-      "20"
-    ],
-    [
-      "nextjs_advanced",
-      "21"
-    ],
-    [
-      "debugging",
-      "27"
-    ],
-    [
-      "nextjs_advanced",
-      "27"
-    ],
-    [
-      "nextjs_advanced",
-      "9"
-    ],
-    [
-      "testing",
-      "11"
-    ],
-    [
-      "nextjs_advanced",
-      "15"
-    ],
-    [
       "react_internals",
-      "9"
-    ],
-    [
-      "state_management",
-      "21"
-    ],
-    [
-      "react_internals",
-      "3"
-    ],
-    [
-      "debugging",
-      "10"
-    ],
-    [
-      "nextjs_advanced",
-      "13"
-    ],
-    [
-      "typescript",
-      "25"
-    ],
-    [
-      "debugging",
-      "9"
-    ],
-    [
-      "nextjs_advanced",
       "11"
-    ],
-    [
-      "css_rendering",
-      "11"
-    ],
-    [
-      "css_rendering",
-      "23"
-    ],
-    [
-      "testing",
-      "23"
-    ],
-    [
-      "architecture",
-      "1"
-    ],
-    [
-      "state_management",
-      "2"
-    ],
-    [
-      "typescript",
-      "23"
-    ],
-    [
-      "performance",
-      "14"
-    ],
-    [
-      "testing",
-      "19"
     ],
     [
       "debugging",
       "21"
     ],
     [
-      "architecture",
-      "3"
-    ],
-    [
-      "debugging",
-      "14"
-    ],
-    [
-      "typescript",
-      "27"
-    ],
-    [
-      "typescript",
-      "1"
-    ],
-    [
-      "performance",
-      "6"
-    ],
-    [
-      "performance",
-      "18"
-    ],
-    [
-      "typescript",
-      "11"
-    ],
-    [
-      "architecture",
-      "14"
-    ],
-    [
-      "typescript",
-      "10"
-    ],
-    [
-      "typescript",
-      "24"
-    ],
-    [
-      "css_rendering",
-      "13"
-    ],
-    [
-      "state_management",
-      "10"
-    ],
-    [
-      "css_rendering",
-      "1"
-    ],
-    [
-      "architecture",
-      "21"
-    ],
-    [
-      "css_rendering",
-      "24"
-    ],
-    [
-      "debugging",
-      "11"
-    ],
-    [
       "react_internals",
-      "17"
-    ],
-    [
-      "testing",
-      "7"
-    ],
-    [
-      "architecture",
-      "0"
-    ],
-    [
-      "testing",
-      "16"
-    ],
-    [
-      "typescript",
-      "6"
-    ],
-    [
-      "testing",
-      "14"
-    ],
-    [
-      "debugging",
-      "3"
-    ],
-    [
-      "architecture",
-      "19"
-    ],
-    [
-      "architecture",
-      "20"
-    ],
-    [
-      "css_rendering",
-      "16"
-    ],
-    [
-      "nextjs_advanced",
-      "4"
-    ],
-    [
-      "react_internals",
-      "6"
-    ],
-    [
-      "typescript",
-      "17"
-    ],
-    [
-      "react_internals",
-      "8"
-    ],
-    [
-      "architecture",
-      "4"
-    ],
-    [
-      "testing",
-      "6"
-    ],
-    [
-      "performance",
-      "22"
-    ],
-    [
-      "nextjs_advanced",
-      "0"
-    ],
-    [
-      "performance",
       "23"
-    ],
-    [
-      "performance",
-      "21"
-    ],
-    [
-      "typescript",
-      "7"
-    ],
-    [
-      "css_rendering",
-      "5"
-    ],
-    [
-      "architecture",
-      "10"
-    ],
-    [
-      "performance",
-      "13"
-    ],
-    [
-      "testing",
-      "27"
-    ],
-    [
-      "state_management",
-      "16"
-    ],
-    [
-      "css_rendering",
-      "6"
-    ],
-    [
-      "testing",
-      "5"
-    ],
-    [
-      "css_rendering",
-      "26"
-    ],
-    [
-      "debugging",
-      "18"
-    ],
-    [
-      "debugging",
-      "16"
-    ],
-    [
-      "react_internals",
-      "25"
-    ],
-    [
-      "react_internals",
-      "27"
-    ],
-    [
-      "state_management",
-      "13"
-    ],
-    [
-      "performance",
-      "20"
-    ],
-    [
-      "debugging",
-      "23"
-    ],
-    [
-      "debugging",
-      "15"
-    ],
-    [
-      "react_internals",
-      "14"
-    ],
-    [
-      "nextjs_advanced",
-      "22"
-    ],
-    [
-      "debugging",
-      "22"
-    ],
-    [
-      "testing",
-      "22"
-    ],
-    [
-      "architecture",
-      "7"
-    ],
-    [
-      "testing",
-      "8"
-    ],
-    [
-      "react_internals",
-      "24"
-    ],
-    [
-      "performance",
-      "2"
-    ],
-    [
-      "performance",
-      "27"
-    ],
-    [
-      "testing",
-      "15"
-    ],
-    [
-      "state_management",
-      "23"
-    ],
-    [
-      "typescript",
-      "14"
-    ],
-    [
-      "debugging",
-      "26"
-    ],
-    [
-      "performance",
-      "1"
-    ],
-    [
-      "css_rendering",
-      "17"
-    ],
-    [
-      "nextjs_advanced",
-      "25"
-    ],
-    [
-      "nextjs_advanced",
-      "24"
-    ],
-    [
-      "performance",
-      "19"
-    ],
-    [
-      "typescript",
-      "13"
-    ],
-    [
-      "performance",
-      "3"
-    ],
-    [
-      "testing",
-      "0"
-    ],
-    [
-      "typescript",
-      "5"
-    ],
-    [
-      "nextjs_advanced",
-      "7"
-    ],
-    [
-      "typescript",
-      "16"
-    ],
-    [
-      "typescript",
-      "2"
-    ],
-    [
-      "testing",
-      "10"
-    ],
-    [
-      "typescript",
-      "19"
-    ],
-    [
-      "nextjs_advanced",
-      "3"
-    ],
-    [
-      "performance",
-      "8"
-    ],
-    [
-      "performance",
-      "11"
-    ],
-    [
-      "architecture",
-      "27"
-    ],
-    [
-      "debugging",
-      "8"
-    ],
-    [
-      "nextjs_advanced",
-      "20"
-    ],
-    [
-      "react_internals",
-      "13"
-    ],
-    [
-      "state_management",
-      "9"
-    ],
-    [
-      "architecture",
-      "8"
     ],
     [
       "performance",
@@ -466,550 +18,974 @@
     ],
     [
       "react_internals",
-      "22"
+      "18"
     ],
     [
-      "react_internals",
+      "nextjs_advanced",
       "4"
     ],
     [
       "performance",
-      "9"
-    ],
-    [
-      "testing",
-      "3"
+      "21"
     ],
     [
       "typescript",
       "0"
     ],
     [
+      "performance",
+      "15"
+    ],
+    [
       "testing",
-      "2"
+      "23"
+    ],
+    [
+      "performance",
+      "23"
     ],
     [
       "debugging",
-      "25"
+      "8"
+    ],
+    [
+      "nextjs_advanced",
+      "0"
+    ],
+    [
+      "debugging",
+      "3"
     ],
     [
       "react_internals",
       "16"
     ],
     [
+      "testing",
+      "16"
+    ],
+    [
       "debugging",
-      "12"
-    ],
-    [
-      "performance",
-      "26"
-    ],
-    [
-      "react_internals",
-      "7"
-    ],
-    [
-      "react_internals",
       "23"
     ],
     [
-      "architecture",
-      "17"
-    ],
-    [
-      "css_rendering",
-      "10"
-    ],
-    [
-      "testing",
-      "1"
-    ],
-    [
-      "css_rendering",
-      "12"
-    ],
-    [
-      "react_internals",
-      "15"
-    ],
-    [
-      "typescript",
-      "8"
-    ],
-    [
-      "testing",
-      "21"
-    ],
-    [
-      "nextjs_advanced",
-      "12"
-    ],
-    [
-      "testing",
-      "17"
-    ],
-    [
-      "typescript",
-      "3"
-    ],
-    [
       "performance",
-      "25"
+      "7"
     ],
     [
-      "react_internals",
-      "19"
+      "testing",
+      "4"
+    ],
+    [
+      "testing",
+      "7"
     ],
     [
       "testing",
       "12"
     ],
     [
-      "testing",
+      "typescript",
       "18"
     ],
     [
-      "debugging",
-      "1"
-    ],
-    [
-      "testing",
-      "20"
-    ],
-    [
-      "nextjs_advanced",
-      "19"
-    ],
-    [
-      "architecture",
-      "23"
-    ],
-    [
-      "state_management",
-      "11"
-    ],
-    [
-      "debugging",
-      "20"
-    ],
-    [
-      "state_management",
-      "5"
-    ],
-    [
-      "debugging",
-      "5"
-    ],
-    [
-      "state_management",
-      "3"
-    ],
-    [
-      "state_management",
-      "22"
-    ],
-    [
-      "nextjs_advanced",
-      "14"
+      "performance",
+      "18"
     ],
     [
       "typescript",
-      "22"
+      "9"
+    ],
+    [
+      "typescript",
+      "6"
     ],
     [
       "performance",
-      "7"
+      "14"
+    ],
+    [
+      "performance",
+      "20"
     ],
     [
       "state_management",
       "0"
+    ],
+    [
+      "state_management",
+      "20"
+    ],
+    [
+      "debugging",
+      "14"
+    ],
+    [
+      "css_rendering",
+      "5"
+    ],
+    [
+      "typescript",
+      "2"
+    ],
+    [
+      "testing",
+      "13"
+    ],
+    [
+      "architecture",
+      "2"
+    ],
+    [
+      "state_management",
+      "12"
+    ],
+    [
+      "react_internals",
+      "28"
+    ],
+    [
+      "typescript",
+      "5"
+    ],
+    [
+      "css_rendering",
+      "18"
+    ],
+    [
+      "architecture",
+      "4"
+    ],
+    [
+      "debugging",
+      "13"
+    ],
+    [
+      "css_rendering",
+      "6"
+    ],
+    [
+      "performance",
+      "19"
+    ],
+    [
+      "architecture",
+      "5"
+    ],
+    [
+      "typescript",
+      "15"
+    ],
+    [
+      "css_rendering",
+      "9"
+    ],
+    [
+      "react_internals",
+      "17"
+    ],
+    [
+      "performance",
+      "2"
     ],
     [
       "architecture",
       "13"
     ],
     [
-      "react_internals",
-      "0"
-    ],
-    [
-      "typescript",
-      "9"
-    ],
-    [
-      "nextjs_advanced",
-      "1"
-    ],
-    [
-      "nextjs_advanced",
-      "26"
-    ],
-    [
-      "debugging",
-      "4"
+      "state_management",
+      "5"
     ],
     [
       "react_internals",
-      "2"
-    ],
-    [
-      "architecture",
-      "12"
-    ],
-    [
-      "architecture",
-      "26"
-    ],
-    [
-      "react_internals",
-      "12"
-    ],
-    [
-      "testing",
-      "9"
+      "25"
     ],
     [
       "css_rendering",
-      "15"
-    ],
-    [
-      "nextjs_advanced",
-      "23"
-    ],
-    [
-      "nextjs_advanced",
-      "6"
-    ],
-    [
-      "debugging",
-      "6"
-    ],
-    [
-      "state_management",
-      "27"
-    ],
-    [
-      "css_rendering",
-      "2"
-    ],
-    [
-      "state_management",
-      "19"
-    ],
-    [
-      "react_internals",
-      "21"
-    ],
-    [
-      "state_management",
       "20"
     ],
     [
-      "performance",
-      "12"
+      "nextjs_advanced",
+      "2"
     ],
     [
-      "state_management",
-      "17"
+      "css_rendering",
+      "2"
     ],
     [
       "debugging",
+      "20"
+    ],
+    [
+      "typescript",
+      "8"
+    ],
+    [
+      "performance",
+      "6"
+    ],
+    [
+      "architecture",
+      "22"
+    ],
+    [
+      "architecture",
+      "6"
+    ],
+    [
+      "state_management",
+      "23"
+    ],
+    [
+      "react_internals",
+      "2"
+    ],
+    [
+      "testing",
+      "10"
+    ],
+    [
+      "css_rendering",
+      "8"
+    ],
+    [
+      "react_internals",
+      "12"
+    ],
+    [
+      "architecture",
+      "14"
+    ],
+    [
+      "typescript",
+      "24"
+    ],
+    [
+      "performance",
+      "3"
+    ],
+    [
+      "css_rendering",
+      "10"
+    ],
+    [
+      "debugging",
+      "26"
+    ],
+    [
+      "testing",
+      "27"
+    ],
+    [
+      "typescript",
+      "13"
+    ],
+    [
+      "testing",
+      "26"
+    ],
+    [
+      "architecture",
       "7"
     ],
     [
       "state_management",
-      "26"
+      "16"
     ],
     [
-      "testing",
-      "25"
+      "performance",
+      "22"
     ],
     [
       "debugging",
-      "17"
-    ],
-    [
-      "state_management",
-      "4"
+      "6"
     ],
     [
       "typescript",
+      "10"
+    ],
+    [
+      "performance",
+      "13"
+    ],
+    [
+      "state_management",
+      "11"
+    ],
+    [
+      "architecture",
+      "23"
+    ],
+    [
+      "nextjs_advanced",
+      "3"
+    ],
+    [
+      "nextjs_advanced",
+      "20"
+    ],
+    [
+      "state_management",
+      "17"
+    ],
+    [
+      "testing",
+      "5"
+    ],
+    [
+      "nextjs_advanced",
+      "15"
+    ],
+    [
+      "architecture",
+      "19"
+    ],
+    [
+      "nextjs_advanced",
+      "22"
+    ],
+    [
+      "state_management",
+      "3"
+    ],
+    [
+      "react_internals",
+      "24"
+    ],
+    [
+      "css_rendering",
+      "25"
+    ],
+    [
+      "typescript",
+      "26"
+    ],
+    [
+      "performance",
+      "26"
+    ],
+    [
+      "architecture",
+      "20"
+    ],
+    [
+      "testing",
+      "21"
+    ],
+    [
+      "debugging",
+      "2"
+    ],
+    [
+      "performance",
+      "25"
+    ],
+    [
+      "performance",
+      "11"
+    ],
+    [
+      "testing",
+      "22"
+    ],
+    [
+      "typescript",
+      "21"
+    ],
+    [
+      "react_internals",
+      "1"
+    ],
+    [
+      "typescript",
+      "12"
+    ],
+    [
+      "state_management",
+      "1"
+    ],
+    [
+      "css_rendering",
+      "0"
+    ],
+    [
+      "debugging",
+      "22"
+    ],
+    [
+      "debugging",
+      "11"
+    ],
+    [
+      "testing",
+      "14"
+    ],
+    [
+      "architecture",
+      "18"
+    ],
+    [
+      "state_management",
+      "13"
+    ],
+    [
+      "testing",
+      "19"
+    ],
+    [
+      "react_internals",
+      "14"
+    ],
+    [
+      "typescript",
+      "23"
+    ],
+    [
+      "testing",
+      "20"
+    ],
+    [
+      "react_internals",
+      "13"
+    ],
+    [
+      "react_internals",
+      "19"
+    ],
+    [
+      "css_rendering",
+      "22"
+    ],
+    [
+      "typescript",
+      "1"
+    ],
+    [
+      "testing",
+      "17"
+    ],
+    [
+      "architecture",
+      "15"
+    ],
+    [
+      "nextjs_advanced",
+      "7"
+    ],
+    [
+      "css_rendering",
+      "16"
+    ],
+    [
+      "performance",
+      "17"
+    ],
+    [
+      "css_rendering",
+      "19"
+    ],
+    [
+      "nextjs_advanced",
+      "13"
+    ],
+    [
+      "react_internals",
+      "26"
+    ],
+    [
+      "architecture",
+      "0"
+    ],
+    [
+      "css_rendering",
       "15"
     ],
     [
       "css_rendering",
-      "3"
-    ],
-    [
-      "state_management",
-      "25"
+      "13"
     ],
     [
       "nextjs_advanced",
       "16"
     ],
     [
-      "architecture",
-      "15"
-    ],
-    [
-      "performance",
-      "4"
-    ],
-    [
-      "typescript",
-      "21"
-    ],
-    [
-      "debugging",
-      "2"
-    ],
-    [
-      "typescript",
-      "26"
-    ],
-    [
-      "css_rendering",
-      "22"
-    ],
-    [
-      "state_management",
-      "8"
-    ],
-    [
-      "css_rendering",
-      "18"
-    ],
-    [
-      "css_rendering",
-      "14"
-    ],
-    [
       "nextjs_advanced",
-      "18"
-    ],
-    [
-      "architecture",
-      "11"
-    ],
-    [
-      "performance",
-      "17"
-    ],
-    [
-      "typescript",
       "12"
-    ],
-    [
-      "state_management",
-      "14"
-    ],
-    [
-      "css_rendering",
-      "8"
-    ],
-    [
-      "nextjs_advanced",
-      "5"
-    ],
-    [
-      "react_internals",
-      "1"
-    ],
-    [
-      "css_rendering",
-      "4"
-    ],
-    [
-      "react_internals",
-      "26"
-    ],
-    [
-      "css_rendering",
-      "21"
     ],
     [
       "testing",
       "24"
     ],
     [
-      "state_management",
-      "18"
-    ],
-    [
-      "css_rendering",
-      "20"
-    ],
-    [
-      "nextjs_advanced",
-      "8"
+      "performance",
+      "0"
     ],
     [
       "state_management",
       "15"
     ],
     [
-      "state_management",
-      "12"
+      "css_rendering",
+      "17"
     ],
     [
       "state_management",
+      "25"
+    ],
+    [
+      "debugging",
+      "9"
+    ],
+    [
+      "debugging",
+      "4"
+    ],
+    [
+      "react_internals",
+      "3"
+    ],
+    [
+      "typescript",
+      "14"
+    ],
+    [
+      "css_rendering",
       "1"
+    ],
+    [
+      "nextjs_advanced",
+      "27"
+    ],
+    [
+      "typescript",
+      "3"
+    ],
+    [
+      "state_management",
+      "6"
+    ],
+    [
+      "architecture",
+      "12"
+    ],
+    [
+      "nextjs_advanced",
+      "11"
+    ],
+    [
+      "css_rendering",
+      "24"
     ],
     [
       "typescript",
       "4"
     ],
     [
-      "react_internals",
-      "20"
-    ],
-    [
-      "performance",
-      "0"
-    ],
-    [
-      "performance",
-      "10"
-    ],
-    [
-      "architecture",
-      "22"
-    ],
-    [
-      "react_internals",
-      "10"
-    ],
-    [
-      "architecture",
+      "testing",
       "2"
     ],
     [
-      "react_internals",
-      "18"
+      "debugging",
+      "0"
     ],
     [
-      "css_rendering",
+      "testing",
+      "25"
+    ],
+    [
+      "architecture",
+      "25"
+    ],
+    [
+      "nextjs_advanced",
+      "6"
+    ],
+    [
+      "debugging",
+      "1"
+    ],
+    [
+      "testing",
+      "3"
+    ],
+    [
+      "state_management",
+      "4"
+    ],
+    [
+      "nextjs_advanced",
       "19"
     ],
     [
+      "architecture",
+      "21"
+    ],
+    [
+      "testing",
+      "11"
+    ],
+    [
+      "debugging",
+      "10"
+    ],
+    [
+      "testing",
+      "0"
+    ],
+    [
+      "architecture",
+      "8"
+    ],
+    [
+      "testing",
+      "8"
+    ],
+    [
+      "architecture",
+      "17"
+    ],
+    [
+      "react_internals",
+      "6"
+    ],
+    [
       "typescript",
-      "18"
+      "17"
+    ],
+    [
+      "typescript",
+      "19"
+    ],
+    [
+      "debugging",
+      "7"
     ],
     [
       "debugging",
       "19"
     ],
     [
+      "state_management",
+      "21"
+    ],
+    [
+      "performance",
+      "8"
+    ],
+    [
+      "debugging",
+      "5"
+    ],
+    [
       "architecture",
-      "6"
+      "9"
+    ],
+    [
+      "react_internals",
+      "4"
+    ],
+    [
+      "nextjs_advanced",
+      "24"
+    ],
+    [
+      "react_internals",
+      "5"
+    ],
+    [
+      "react_internals",
+      "8"
+    ],
+    [
+      "typescript",
+      "25"
+    ],
+    [
+      "nextjs_advanced",
+      "10"
+    ],
+    [
+      "react_internals",
+      "0"
+    ],
+    [
+      "nextjs_advanced",
+      "17"
+    ],
+    [
+      "architecture",
+      "24"
+    ],
+    [
+      "performance",
+      "12"
+    ],
+    [
+      "nextjs_advanced",
+      "9"
     ],
     [
       "css_rendering",
-      "0"
+      "21"
+    ],
+    [
+      "state_management",
+      "2"
+    ],
+    [
+      "debugging",
+      "15"
+    ],
+    [
+      "state_management",
+      "18"
+    ],
+    [
+      "css_rendering",
+      "12"
+    ],
+    [
+      "nextjs_advanced",
+      "25"
+    ],
+    [
+      "typescript",
+      "16"
+    ],
+    [
+      "react_internals",
+      "10"
+    ],
+    [
+      "typescript",
+      "20"
+    ],
+    [
+      "architecture",
+      "16"
+    ],
+    [
+      "react_internals",
+      "15"
+    ],
+    [
+      "state_management",
+      "22"
+    ],
+    [
+      "architecture",
+      "10"
+    ],
+    [
+      "react_internals",
+      "27"
+    ],
+    [
+      "state_management",
+      "24"
+    ],
+    [
+      "react_internals",
+      "21"
+    ],
+    [
+      "css_rendering",
+      "14"
+    ],
+    [
+      "css_rendering",
+      "26"
+    ],
+    [
+      "css_rendering",
+      "7"
+    ],
+    [
+      "react_internals",
+      "7"
+    ],
+    [
+      "nextjs_advanced",
+      "8"
+    ],
+    [
+      "debugging",
+      "12"
+    ],
+    [
+      "debugging",
+      "25"
+    ],
+    [
+      "state_management",
+      "10"
+    ],
+    [
+      "nextjs_advanced",
+      "23"
+    ],
+    [
+      "debugging",
+      "16"
+    ],
+    [
+      "typescript",
+      "22"
+    ],
+    [
+      "state_management",
+      "19"
+    ],
+    [
+      "performance",
+      "1"
+    ],
+    [
+      "testing",
+      "9"
+    ],
+    [
+      "css_rendering",
+      "4"
+    ],
+    [
+      "state_management",
+      "7"
+    ],
+    [
+      "nextjs_advanced",
+      "26"
+    ],
+    [
+      "nextjs_advanced",
+      "14"
+    ],
+    [
+      "state_management",
+      "8"
+    ],
+    [
+      "testing",
+      "18"
+    ],
+    [
+      "react_internals",
+      "22"
+    ],
+    [
+      "performance",
+      "9"
+    ],
+    [
+      "performance",
+      "10"
+    ],
+    [
+      "nextjs_advanced",
+      "1"
+    ],
+    [
+      "state_management",
+      "9"
+    ],
+    [
+      "testing",
+      "15"
+    ],
+    [
+      "testing",
+      "6"
+    ],
+    [
+      "performance",
+      "4"
+    ],
+    [
+      "nextjs_advanced",
+      "21"
+    ],
+    [
+      "debugging",
+      "24"
+    ],
+    [
+      "performance",
+      "16"
+    ],
+    [
+      "css_rendering",
+      "11"
+    ],
+    [
+      "nextjs_advanced",
+      "18"
+    ],
+    [
+      "react_internals",
+      "9"
+    ],
+    [
+      "nextjs_advanced",
+      "5"
+    ],
+    [
+      "typescript",
+      "7"
+    ],
+    [
+      "architecture",
+      "11"
+    ],
+    [
+      "debugging",
+      "17"
+    ],
+    [
+      "architecture",
+      "3"
     ]
   ],
   "used": [
     [
-      "debugging",
-      "13"
-    ],
-    [
-      "debugging",
-      "24"
-    ],
-    [
-      "state_management",
-      "24"
-    ],
-    [
-      "nextjs_advanced",
-      "17"
-    ],
-    [
-      "nextjs_advanced",
-      "2"
+      "css_rendering",
+      "23"
     ],
     [
       "testing",
-      "4"
+      "1"
     ],
     [
-      "architecture",
-      "9"
-    ],
-    [
-      "architecture",
-      "25"
-    ],
-    [
-      "testing",
-      "26"
-    ],
-    [
-      "state_management",
-      "6"
+      "performance",
+      "5"
     ],
     [
       "debugging",
-      "0"
-    ],
-    [
-      "architecture",
       "18"
     ],
     [
-      "testing",
-      "13"
+      "architecture",
+      "1"
     ],
     [
-      "react_internals",
+      "typescript",
       "11"
     ],
     [
       "react_internals",
-      "5"
-    ],
-    [
-      "performance",
-      "15"
-    ],
-    [
-      "nextjs_advanced",
-      "10"
-    ],
-    [
-      "architecture",
-      "16"
-    ],
-    [
-      "architecture",
-      "24"
+      "20"
     ],
     [
       "state_management",
-      "7"
+      "14"
     ],
     [
       "css_rendering",
-      "9"
-    ],
-    [
-      "css_rendering",
-      "7"
-    ],
-    [
-      "css_rendering",
-      "25"
+      "3"
     ],
     [
       "performance",
-      "16"
-    ],
-    [
-      "performance",
-      "5"
+      "27"
     ]
   ],
-  "last_theme": "performance"
+  "last_theme": "architecture"
 }
