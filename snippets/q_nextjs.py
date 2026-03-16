@@ -1,336 +1,353 @@
 """
-snippets/q_nextjs.py — 28 FRESH Next.js questions (mix of debugging + code generation)
-Zero overlap with archived set.
+snippets/q_nextjs.py — BATCH 3: 28 brand-new Next.js questions
+Zero overlap with batch1 or batch2 archives.
 """
 
 Q_NEXTJS = [
 
 """**Task (Code Generation):**
-Implement a Next.js 14 Server Action for a multi-step form that:
-- Validates each step server-side using Zod
-- Stores intermediate progress in an encrypted cookie (not exposed to client)
-- Returns typed errors back to the form via `useActionState`
-- Clears the cookie on final submission or abandonment (via a separate cleanup action)
-
-Show the action file, the Zod schemas, and the client form component.""",
-
-"""**Debug Scenario:**
-A Next.js 14 App Router page fetches user data in a Server Component and passes it to a Client Component. After deploying to Vercel, the user data is stale on the first request after deployment — it shows the previous user's data for ~30 seconds.
-
-```tsx
-// page.tsx (Server Component)
-const user = await getUser(userId); // cached with default options
-return <ProfileEditor user={user} />;
-```
-
-`getUser` uses `fetch` internally without cache options. Explain how Next.js's default fetch cache behaves per-request vs per-build, and show the correct combination of `cache: 'no-store'`, `revalidate`, and `unstable_noStore()` for user-specific data.""",
-
-"""**Task (Code Generation):**
-Build a Next.js middleware chain pattern that composes multiple middleware functions:
+Implement a multi-tenant Next.js 14 App Router application where each tenant has a subdomain (`tenant.app.com`) routed to their own data and theme:
 
 ```ts
-// middleware.ts
-export default chain([
-  withAuth,
-  withLocale,
-  withRateLimit,
-  withSecurityHeaders,
-]);
+// middleware.ts:
+const tenant = req.nextUrl.hostname.split('.')[0]; // 'acme' from acme.app.com
+// Rewrite to /tenants/acme/dashboard without changing the URL
 ```
 
-Each middleware in the chain can: return a response early, modify the request, or pass to the next middleware. Show the `chain` helper implementation and one complete middleware (`withAuth`) that reads a JWT, validates it, and redirects to `/login` if invalid.""",
+Show: the Middleware rewriting strategy, how tenant config (theme, feature flags) is fetched once per request and stored in a request-scoped variable, Next.js `generateStaticParams` for pre-building known tenant pages, and the database multi-tenancy pattern (row-level security vs separate schemas).""",
 
 """**Debug Scenario:**
-A Next.js 14 app uses `cookies().set()` inside a Server Component to set a theme preference. The deployment throws:
-
-```
-Error: Cookies can only be modified in a Server Action or Route Handler.
-```
-
-Explain why Next.js restricts cookie mutations to specific contexts, and design a proper theme-setting architecture using a Server Action triggered from a Client Component toggle button.""",
-
-"""**Task (Code Generation):**
-Implement a `getMetadataFromCMS` function that generates rich Open Graph metadata for dynamic blog posts in Next.js 14:
+A Next.js 14 Server Action that handles a file upload fails silently in production. The action works in development but in production the `FormData` body is empty.
 
 ```ts
-// app/blog/[slug]/page.tsx
-export async function generateMetadata({ params }): Promise<Metadata> {
-  // ...
+'use server';
+async function uploadFile(formData: FormData) {
+  const file = formData.get('file'); // null in production
 }
 ```
 
-Requirements:
-- Fetches post data with `cache: 'force-cache'` and a `revalidateTag`
-- Generates `og:image` using Next.js's `ImageResponse` (edge runtime)
-- Falls back to a default OG image if the post has no image
-- Includes Twitter card metadata
-- Handles 404 (post not found) by returning minimal metadata
-
-Show the full `generateMetadata` and the dynamic OG image route.""",
-
-"""**Debug Scenario:**
-A Next.js app uses `useSearchParams()` in a component. After adding `export const dynamic = 'force-static'` to the page, the build fails:
-
-```
-Error: Page "/search" with "force-static" couldn't be rendered statically 
-because it used `useSearchParams`.
-```
-
-A teammate suggests wrapping the component in `<Suspense>`. Explain precisely why `useSearchParams` requires Suspense in static pages, what happens during SSG if search params aren't known at build time, and show the correct Suspense boundary placement.""",
+Investigation reveals Vercel has a 4.5MB default body size limit, and the upload is a 6MB file. Show: configuring `export const config = { api: { bodyParser: false } }` (doesn't apply to Server Actions), the correct way to configure the Vercel function body size limit, and an alternative — streaming the upload directly to S3 with a presigned URL bypassing Next.js entirely.""",
 
 """**Task (Code Generation):**
-Implement a Next.js Route Handler that acts as a proxy to an external API, adding authentication headers that shouldn't be exposed to the browser:
-
-```
-GET /api/proxy/reports?filter=active
-→ https://internal-api.company.com/reports?filter=active
-   with Authorization: Bearer ${SERVER_SECRET}
-```
-
-Requirements:
-- Streams the response (don't buffer the entire response)
-- Forwards relevant headers (`Content-Type`, `Cache-Control`)
-- Validates the request is authenticated (checks session cookie) before proxying
-- Handles upstream errors with proper status codes
-
-Show the Route Handler using the Web Streams API.""",
-
-"""**Debug Scenario:**
-A Next.js app with App Router has a layout that fetches the current user:
-
-```tsx
-// app/layout.tsx
-export default async function RootLayout({ children }) {
-  const user = await getCurrentUser(); // DB call
-  return <html><body><Nav user={user} />{children}</body></html>;
-}
-```
-
-Users report the layout re-fetches on every navigation even for the same user. The DB call adds 80ms to every route transition. Explain why layout data re-fetches during client navigation, and show how to use React `cache()` to deduplicate the DB call within a single request.""",
-
-"""**Task (Code Generation):**
-Build a type-safe feature flag system for Next.js 14 that evaluates flags on the Edge:
-
-```ts
-// Usage in Server Component:
-const flags = await getFlags(request);
-if (flags.newCheckout) { return <NewCheckout />; }
-```
-
-Architecture requirements:
-- Flags stored in Vercel Edge Config (or a JSON file for local dev)
-- User-segment targeting: `{ role: 'beta' }` enables different flags
-- Zero latency on the hot path (no external API call per request)
-- Type-safe flag definitions (TypeScript)
-
-Show the complete implementation.""",
-
-"""**Debug Scenario:**
-A Next.js 14 app with streaming SSR shows blank content for 3 seconds on the initial load, then everything appears at once. The Suspense boundaries are correctly set up.
-
-Investigation with Chrome's Network tab shows a single large HTML response arriving after 3 seconds instead of streaming chunks. The server is running on Node.js with an nginx proxy.
-
-Diagnose why nginx is buffering the streamed response and show the nginx config changes needed to enable true streaming (`X-Accel-Buffering`, `proxy_buffering`, chunked transfer encoding).""",
-
-"""**Task (Code Generation):**
-Implement a `useOptimisticAction` hook for Next.js 14 that wraps a Server Action with optimistic UI:
-
-```tsx
-const { trigger, optimisticState } = useOptimisticAction(
-  deleteRow, // Server Action
-  { onOptimistic: (state, id) => state.filter(r => r.id !== id) }
-);
-```
-
-- Uses React 19's `useOptimistic` under the hood
-- Reverts optimistic state if the Server Action throws
-- Shows a loading indicator per-item (not full-page)
-- Handles concurrent mutations (two deletes in quick succession)""",
-
-"""**Debug Scenario:**
-After migrating to Next.js 14 App Router, the team notices `console.log` statements in Server Components appear in both the server terminal AND the browser console. They expected server-only logs to be invisible to users.
-
-Explain why Server Component logs appear in browser DevTools in Next.js development mode, whether this happens in production, and how to use `server-only` package + lint rules to prevent importing server-only code into Client Components.""",
-
-"""**Task (Code Generation):**
-Build a Next.js 14 multi-tenant routing system where the subdomain determines the tenant:
-
-```
-company1.app.com → tenant: company1
-company2.app.com → tenant: company2
-```
-
-Requirements:
-- Middleware reads the subdomain from `request.headers.get('host')`
-- Rewrites the request to `/tenants/[tenant]/...` internally
-- Passes the tenant context to Server Components via headers
-- Works in local dev with custom hosts in `/etc/hosts`
-
-Show the Middleware, the rewrite logic, and how Server Components read the tenant.""",
-
-"""**Debug Scenario:**
-A Next.js 14 dashboard uses Parallel Routes for a split-pane layout. When navigating between items in the `@detail` slot, the `@list` slot shows a loading state even though the list data hasn't changed.
-
-The `@list` slot's `loading.tsx` file is triggering on every `@detail` navigation. Explain how Next.js determines when to show a slot's loading state during soft navigation, and how to prevent the list loading state from appearing when only the detail slot is navigating.""",
-
-"""**Task (Code Generation):**
-Implement incremental data loading for a Next.js 14 page that displays a large dataset in sections, using React Suspense and `loading.tsx`:
-
-```
-Page loads instantly →
-  KPI cards load (fast query) →
-    Data table loads (slow query) →
-      Chart section loads (slowest)
-```
-
-Show the folder structure, the nested Suspense/loading boundaries, and how to use `Promise.all` vs sequential awaits to control load order. Explain when to use `loading.tsx` vs inline `<Suspense>` boundaries.""",
-
-"""**Debug Scenario:**
-A Next.js app deployed on Vercel has `revalidateTag('reports')` called in a Server Action. Other Vercel regions still serve stale data for up to 60 seconds after the tag is revalidated.
-
-Explain Next.js's revalidation propagation across Vercel's CDN regions, why there's a propagation delay, and whether `revalidatePath` vs `revalidateTag` behaves differently across regions. What's the architecture for near-instant global consistency after a mutation?""",
-
-"""**Task (Code Generation):**
-Build a Next.js 14 authentication system using the new `auth()` pattern (no callbacks), with:
-- Session stored in a signed, encrypted cookie (not database)
-- `auth()` callable in Server Components, Route Handlers, and Middleware
-- Protected routes redirect to `/login` via Middleware
-- A `<SignOut>` Server Action that clears the cookie
-
-Show all files: `auth.ts`, `middleware.ts`, `app/login/page.tsx`, `app/dashboard/layout.tsx`.""",
-
-"""**Debug Scenario:**
-A team built a Next.js API route that processes file uploads. It works in local dev but fails in production with a 413 error and in Vercel with a function timeout after 10 seconds for files over 4MB.
-
-```ts
-// app/api/upload/route.ts
-export async function POST(req: Request) {
-  const formData = await req.formData(); // buffers entire body
-  const file = formData.get('file') as File;
-  await uploadToS3(file);
-}
-```
-
-Design a presigned URL upload pattern that bypasses the serverless function for file content, showing the Route Handler for generating the presigned URL and the client-side direct-to-S3 upload logic.""",
-
-"""**Task (Code Generation):**
-Implement a Next.js 14 sitemap generator that handles a large e-commerce site with 500,000 product pages:
+Build a `generateSitemap` utility for a Next.js App Router app that creates a dynamic `sitemap.xml` from database content:
 
 ```ts
 // app/sitemap.ts
-export default async function sitemap(): Promise<MetadataRoute.Sitemap>
-```
-
-Requirements:
-- Can't return 500k entries in one response (memory limit)
-- Use sitemap index + multiple sitemap files (`/sitemap/0.xml`, `/sitemap/1.xml`)
-- Dynamic Route Handler per shard: `/sitemap/[shard]/route.ts`
-- Cached at CDN level with `revalidate = 3600`
-
-Show the index sitemap, the sharded sitemap route, and the database query strategy.""",
-
-"""**Debug Scenario:**
-A Next.js app uses `next/font` to load a custom font. In production, the font renders correctly. In development, the font fails to load with a CORS error in the console:
-
-```
-Access to font has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header
-```
-
-But `next/font` is supposed to self-host fonts automatically. Diagnose why CORS appears for fonts in dev mode vs production, and whether the error affects users or is a dev-mode artifact. Explain `next/font`'s font inlining strategy for production.""",
-
-"""**Task (Code Generation):**
-Build a real-time notification system for Next.js 14 using Server-Sent Events (SSE):
-
-```
-GET /api/notifications/stream → text/event-stream
-```
-
-Requirements:
-- Route Handler streams events to connected clients
-- Events pushed when a Server Action (e.g., task completion) fires
-- Client subscribes with `useEventSource` hook
-- Handles reconnection automatically
-- Cleans up connections on client disconnect
-
-Show the Route Handler, the server-side event emitter, and the React hook.""",
-
-"""**Debug Scenario:**
-A Next.js 14 page exports both `generateStaticParams` and uses `cookies()` in a nested Server Component. The build fails with conflicting requirements: static generation can't use dynamic APIs.
-
-The team wants: pre-rendered pages (for SEO) + personalized content (from cookies). Diagnose the conflict and design a PPR (Partial Prerendering) solution where the static shell is pre-rendered but the personalized section is deferred to request time.""",
-
-"""**Task (Code Generation):**
-Implement a Next.js 14 rate limiter for API routes using Upstash Redis:
-
-```ts
-// Rate limit: 10 requests per minute per IP
-const { success, limit, remaining, reset } = await rateLimit(request);
-if (!success) return new Response('Too Many Requests', { status: 429 });
-```
-
-Show:
-1. The Upstash Redis sliding window rate limiter implementation
-2. Integration in a Route Handler middleware helper
-3. IP extraction that works behind Vercel's proxy (`x-forwarded-for`)
-4. Returning proper `Retry-After` and `X-RateLimit-*` headers""",
-
-"""**Debug Scenario:**
-After adding `export const runtime = 'edge'` to a Route Handler for better latency, the handler crashes with:
-
-```
-Error: The edge runtime does not support Node.js 'crypto' module.
-```
-
-The handler uses `crypto.createHmac` for webhook signature verification. List all Node.js APIs unavailable in the Edge Runtime, show how to replace `crypto.createHmac` with the Web Crypto API (`SubtleCrypto`), and explain when edge runtime is and isn't worth the migration pain.""",
-
-"""**Task (Code Generation):**
-Build a `useServerAction` hook that provides loading, error, and optimistic state for any Next.js 14 Server Action:
-
-```tsx
-const { execute, isPending, error } = useServerAction(saveReport);
-
-<button onClick={() => execute(formData)} disabled={isPending}>
-  {isPending ? 'Saving...' : 'Save'}
-</button>
-```
-
-Requirements:
-- Works with `startTransition` for non-blocking UI
-- Captures thrown errors from Server Actions (they become unhandled rejections without this)
-- Compatible with `useFormStatus`
-- TypeScript generic: `useServerAction<TData, TError>`""",
-
-"""**Debug Scenario:**
-A Next.js 14 app with App Router has a layout that uses a React context provider. After deploying, users randomly see each other's data in the layout.
-
-```tsx
-// app/layout.tsx
-const userCache = {}; // module-level cache
-export default async function Layout({ children }) {
-  const user = userCache[userId] ?? await getUser(userId);
-  userCache[userId] = user;
+export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
+  const [staticRoutes, blogPosts, products] = await Promise.all([...]);
+  return [...staticRoutes, ...blogPosts, ...products];
 }
 ```
 
-Explain why module-level state in Server Components is shared across ALL users (Node.js module singleton), why this is a critical security bug, and the correct patterns for per-request state (React `cache()`, `headers()`, passing as props).""",
-
-"""**Task (Code Generation):**
-Implement a complete `robots.txt` + `sitemap.xml` + structured data (JSON-LD) setup for a Next.js 14 e-commerce site:
-
-1. `app/robots.ts` — disallows `/account`, `/cart`, allows everything else, points to sitemap
-2. `app/sitemap.ts` — categories and top products with `changefreq` and `priority`
-3. A `<JsonLd>` component that injects `application/ld+json` for product pages
-
-Show the TypeScript for all three, with the JSON-LD schema for a `Product` with `offers`, `aggregateRating`, and `breadcrumb`.""",
+Requirements:
+- Static routes with fixed priority/changefreq
+- Blog posts from CMS with `lastModified` from `updated_at` column
+- Product pages with `changefreq: 'daily'`
+- Sitemap index (split into multiple sitemaps) when > 50,000 URLs
+- Revalidate every 24 hours (`revalidate = 86400`)""",
 
 """**Debug Scenario:**
-A Next.js 14 app uses Prisma to query a PostgreSQL database. In production with multiple serverless function instances, the app hits a "too many database connections" error within minutes of high traffic.
+A Next.js App Router page uses `useSearchParams()` inside a component wrapped with `<Suspense>`. When users navigate to the page directly (no Suspense parent), the page crashes with:
 
-```ts
-// lib/db.ts
-const prisma = new PrismaClient(); // new client per function invocation!
+```
+Error: `useSearchParams()` should be wrapped in a suspense boundary at the page level.
 ```
 
-Explain why serverless functions create connection pool exhaustion with ORMs, show the Next.js-safe singleton pattern for PrismaClient using `globalThis`, and discuss PgBouncer vs connection pooling at the application layer.""",
+But the component IS wrapped in Suspense. Investigate: the error happens because `useSearchParams()` triggers Suspense but the Suspense boundary is below the component — it must be above. Show the correct component tree structure and why Next.js requires `useSearchParams` to be in a Client Component with a Suspense boundary at the page export level.""",
+
+"""**Task (Code Generation):**
+Implement optimistic UI for a Next.js Server Action that "likes" a post:
+
+```tsx
+// The like count updates immediately (optimistic) and confirms/reverts from server
+const [optimisticLikes, addOptimisticLike] = useOptimistic(
+  post.likes,
+  (state, userId: string) => [...state, userId]
+);
+
+async function handleLike() {
+  addOptimisticLike(currentUser.id);
+  await likePost(post.id); // Server Action
+}
+```
+
+Show: `useOptimistic` setup, the Server Action with `revalidatePath`, handling the case where the action fails (automatic rollback), and the transition to show "pending" state while the server processes.""",
+
+"""**Debug Scenario:**
+A Next.js app's `generateMetadata` function fetches from the same API as the page component. This causes two identical API requests per page render.
+
+```ts
+// page.tsx
+export async function generateMetadata({ params }) {
+  const post = await getPost(params.id); // request 1
+  return { title: post.title };
+}
+export default async function Page({ params }) {
+  const post = await getPost(params.id); // request 2, identical
+  return <Article post={post} />;
+}
+```
+
+Show how `React.cache()` deduplicates these requests within a single render tree (unlike `fetch` deduplication which only works for `fetch` calls, not arbitrary async functions). Show the `getPost` wrapper with `React.cache()` and verify deduplication with timing logs.""",
+
+"""**Task (Code Generation):**
+Build a `useServerAction<T>` hook that wraps Next.js Server Actions with loading, error, and optimistic state:
+
+```ts
+const { execute, isPending, error, data } = useServerAction(createReport);
+// Usage:
+await execute({ title, content });
+// Shows loading spinner during action, handles errors, shows success state
+```
+
+Show: `useTransition` for pending state, error boundary integration for thrown errors, `useOptimistic` for immediate UI response, and TypeScript inference of the action's parameter and return types from the Server Action function signature.""",
+
+"""**Debug Scenario:**
+A Next.js 14 Parallel Route shows a blank loading state instead of the `default.js` fallback. The folder structure is:
+
+```
+app/
+  layout.tsx
+  @analytics/
+    page.tsx
+  @main/
+    page.tsx
+```
+
+The `@analytics` slot renders a slow component. During navigation, the page shows a blank slot instead of the previous content while loading. Explain when Next.js shows `loading.js` vs renders the previous slot vs shows `default.js`, and how `loading.js` inside a slot vs at the layout level produces different UX.""",
+
+"""**Task (Code Generation):**
+Implement a Next.js API Rate Limiter middleware using Edge Runtime and Upstash Redis:
+
+```ts
+// middleware.ts
+const rateLimit = createRateLimiter({
+  requests: 10,
+  window: '60s',
+  identifier: (req) => req.headers.get('x-forwarded-for') ?? 'anonymous',
+  onLimit: (req, limit) => new Response(`Rate limited. Retry after ${limit.reset}s`, { status: 429 }),
+});
+```
+
+Show: Upstash Redis sliding window algorithm, the `RateLimitResult` type, adding `X-RateLimit-*` headers to all responses, exempting authenticated users from the limit, and distributing the check across Vercel Edge regions.""",
+
+"""**Debug Scenario:**
+A Next.js app's static pages (generated at build time with `generateStaticParams`) show stale data for up to 24 hours because `revalidate = 86400` is set. After a CMS content update, the team triggers `revalidatePath('/blog/my-post')` via a webhook — but the page still shows stale data.
+
+Investigation shows `revalidatePath` is called in a Route Handler but the path parameter doesn't exactly match the page's route. Show the exact path formats that `revalidatePath` accepts, the difference between `revalidatePath('/blog/my-post')` vs `revalidatePath('/blog/[slug]', 'page')`, and how to use `revalidateTag` as a more robust alternative.""",
+
+"""**Task (Code Generation):**
+Build a real-time notification system using Next.js Route Handlers with Server-Sent Events (SSE):
+
+```ts
+// app/api/notifications/stream/route.ts
+export async function GET(req: Request) {
+  const stream = new ReadableStream({
+    start(controller) {
+      // Send events to controller.enqueue()
+    },
+  });
+  return new Response(stream, {
+    headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' },
+  });
+}
+```
+
+Show: the SSE stream implementation, client-side `EventSource` hook, reconnection handling, authentication via cookie in the SSE request, and cleanup when the client disconnects.""",
+
+"""**Debug Scenario:**
+A Next.js App Router app has a `layout.tsx` that renders a complex navigation sidebar. The sidebar re-renders on every page navigation because a `'use client'` directive was added to `layout.tsx` to use `usePathname()`.
+
+The fix should preserve the sidebar as a Server Component. Show: extracting `usePathname()` into a small `<ActiveLink>` Client Component nested inside the Server Component sidebar, the pattern of "pushing `use client` down the tree," and why this dramatically reduces client-side JavaScript for the navigation.""",
+
+"""**Task (Code Generation):**
+Implement a Next.js middleware that handles authentication and authorization:
+
+```ts
+export function middleware(req: NextRequest) {
+  const token = req.cookies.get('session')?.value;
+  
+  if (!token && isProtected(req.nextUrl.pathname)) {
+    return NextResponse.redirect(new URL('/login', req.url));
+  }
+  
+  if (token && !hasPermission(token, req.nextUrl.pathname)) {
+    return NextResponse.redirect(new URL('/403', req.url));
+  }
+}
+```
+
+Show: JWT verification in Edge Runtime (using `jose`, not `jsonwebtoken`), the `isProtected` path matcher with wildcards, role-based `hasPermission` checks, setting request headers to pass user context to Server Components, and the `matcher` config to skip static assets.""",
+
+"""**Debug Scenario:**
+A Next.js app's `next/image` component shows oversized images on Retina displays (2x), loading 2400px images when 1200px would suffice visually. The `sizes` prop is missing.
+
+```tsx
+<Image src={hero} alt="Hero" width={1200} height={600} />
+// On 2x screen → loads 2400px intrinsic width image
+```
+
+Explain how `next/image` uses `srcset` + `sizes` to determine which image variant to load, show the correct `sizes` attribute for a full-width image, a half-width sidebar image, and a card grid item. Calculate the exact byte savings from correct `sizes` on a typical page load.""",
+
+"""**Task (Code Generation):**
+Build a `<FeatureGate>` component for Next.js that enables/disables features per-user in Server Components:
+
+```tsx
+<FeatureGate feature="new-checkout" fallback={<OldCheckout />}>
+  <NewCheckout />
+</FeatureGate>
+```
+
+Requirements:
+- Feature flags fetched server-side (no client flash)
+- User targeting: percentage rollout, user ID allowlist, beta flag
+- Flag values passed from Middleware to Server Components via request headers
+- Client Component support with a `useFeatureFlag` hook backed by the same flags
+- TypeScript: `feature` prop is typed as `keyof FeatureFlags` (no magic strings)""",
+
+"""**Debug Scenario:**
+A Next.js App Router app's build fails with:
+
+```
+Error: Dynamic server usage: Route /dashboard couldn't be rendered statically because it used `cookies`.
+```
+
+The dashboard uses `cookies()` to read the auth session. The build tried to pre-render `/dashboard` statically.
+
+Explain Next.js's static/dynamic rendering heuristics: which APIs force dynamic rendering (`cookies`, `headers`, `searchParams`, `noStore()`), how to opt-in to dynamic rendering explicitly with `export const dynamic = 'force-dynamic'`, and when to use PPR (Partial Pre-rendering) to static-render the shell and dynamically render the personalized parts.""",
+
+"""**Task (Code Generation):**
+Implement a Next.js Edge Config-backed feature flag system. Edge Config is read in O(1) time from Vercel's edge network:
+
+```ts
+// middleware.ts (edge runtime):
+const flags = await getEdgeConfig(); // ~1ms, no database call
+const isNewDesignEnabled = flags['new-design'] === true;
+```
+
+Show: the Vercel Edge Config SDK setup, the Middleware integration, how to update flags via Vercel API (for instant propagation without redeployment), local development with a `.env` fallback, and TypeScript types for the Edge Config schema.""",
+
+"""**Debug Scenario:**
+A Next.js app using `app/` directory has a Server Action that updates a database record. After the action runs, the UI doesn't update even though `revalidatePath('/')` is called.
+
+```ts
+'use server';
+async function updateUser(data: FormData) {
+  await db.user.update({ where: { id }, data: { name: data.get('name') } });
+  revalidatePath('/profile');
+  // UI still shows old name
+}
+```
+
+The page is at `/profile/[userId]`. `revalidatePath('/profile')` invalidates `/profile` but not `/profile/[userId]`. Show the correct revalidation: `revalidatePath('/profile/[userId]', 'page')`, an alternative using `revalidateTag`, and when `redirect()` is more appropriate than `revalidatePath()`.""",
+
+"""**Task (Code Generation):**
+Build a type-safe API client for a Next.js app using Route Handler type inference:
+
+```ts
+// Infer types from Route Handler:
+const client = createTypedClient<typeof GET>('/api/users');
+const { data } = await client.get({ query: { page: 1 } });
+// data is typed as UsersResponse ✓
+```
+
+Show: the Route Handler type export pattern, the `createTypedClient` factory that infers request/response types, how to handle Next.js's `NextResponse.json()` return type, and the `zod` schema validation on both client and server sides for the same schema definition.""",
+
+"""**Debug Scenario:**
+A Next.js app with Server Components fetches user data in a layout:
+
+```tsx
+// app/dashboard/layout.tsx (Server Component)
+const user = await getUser(session.userId);
+// Passes user to all child pages
+```
+
+The user data is 3KB and gets fetched on every navigation within `/dashboard`. The fetch has `cache: 'force-cache'` but the cache is invalidated on every navigation because `session.userId` changes reference (it's parsed fresh from the cookie each time).
+
+Show how `JSON.stringify(session.userId) === JSON.stringify(previousUserId)` for cache key comparison, why React's `cache()` deduplicates within a render but not across navigations, and the correct approach using proper cache tags.""",
+
+"""**Task (Code Generation):**
+Implement a Next.js app with database-backed sessions (no JWT) using HTTP-only cookies:
+
+```ts
+// app/api/auth/login/route.ts
+const sessionId = crypto.randomUUID();
+await db.sessions.create({ sessionId, userId, expiresAt: Date.now() + SESSION_TTL });
+const response = NextResponse.json({ ok: true });
+response.cookies.set('session', sessionId, { httpOnly: true, secure: true, sameSite: 'lax' });
+```
+
+Show: session creation/validation/deletion Route Handlers, Middleware that validates the session on every request (reads from database), session rotation on sensitive operations, absolute vs sliding expiry, and CSRF protection (why `sameSite: 'lax'` + `Origin` header check covers most cases).""",
+
+"""**Debug Scenario:**
+A Next.js app's ISR (Incremental Static Regeneration) pages are being regenerated every 30 seconds as configured, but Vercel logs show 10x more revalidation invocations than expected. Each page view seems to trigger a background revalidation even when the page isn't stale.
+
+Diagnose: Vercel's edge caches across multiple regions each have their own staleness timers. A page stale in 5 regions triggers 5 revalidations. Show how to reduce revalidation traffic with `revalidate = false` + tag-based on-demand revalidation, and the Vercel CDN override headers that prevent per-region re-generation.""",
+
+"""**Task (Code Generation):**
+Build a Next.js App Router app with full internationalization using `next-intl`:
+
+```
+app/
+  [locale]/
+    layout.tsx  ← loads messages for locale
+    page.tsx
+middleware.ts ← detects locale, redirects /about → /en/about
+```
+
+Show: the locale detection in Middleware (Accept-Language + cookie + path), the `[locale]` segment, loading translation messages in Server Components, the `useTranslations` hook in Client Components, and `generateStaticParams` to pre-build all 5 supported locales at build time.""",
+
+"""**Debug Scenario:**
+A Next.js Route Handler that streams a large CSV file from the database runs fine locally but crashes on Vercel with a timeout after 30 seconds (Vercel's maximum function execution time for the Pro plan).
+
+The route fetches 100,000 rows, builds a CSV string in memory, then sends it. Show: the streaming response pattern using `ReadableStream` + `TransformStream` for database cursor-based streaming, how to set `export const maxDuration = 60` for long-running functions, and why the streaming approach avoids the memory spike that crashes the function.""",
+
+"""**Task (Code Generation):**
+Implement a content management workflow in Next.js with draft/publish states:
+
+```ts
+// Preview mode: editors see unpublished draft content
+// app/api/preview/route.ts
+export async function GET(req: Request) {
+  const { searchParams } = new URL(req.url);
+  const secret = searchParams.get('secret');
+  if (secret !== process.env.PREVIEW_SECRET) return new Response('Unauthorized', { status: 401 });
+  
+  const response = NextResponse.redirect(targetUrl);
+  response.cookies.set('__prerender_bypass', draftModeToken);
+  return response;
+}
+```
+
+Show: enabling/disabling Draft Mode with `draftMode()`, fetching draft vs published content based on draft mode, the preview URL workflow for editors, and securing preview routes against public access.""",
+
+"""**Debug Scenario:**
+A Next.js app uses `next/headers`'s `headers()` function inside a utility function called from both Server Components and Client Components. The utility crashes with an error when called from a Client Component:
+
+```
+Error: headers() cannot be called from a Client Component
+```
+
+Show how to create a server-only utility using the `server-only` package (importing it throws at build time if a Client Component tries to import it), the correct pattern of passing pre-fetched headers to client utilities as props, and the `'use server'` vs `server-only` distinction.""",
+
+"""**Task (Code Generation):**
+Build a `useNextRouter` hook that wraps Next.js App Router navigation with transition states and scroll management:
+
+```ts
+const { navigate, isPending, currentPath } = useNextRouter();
+
+await navigate('/dashboard', {
+  scroll: 'top',               // scroll to top after navigation
+  transition: 'slide-left',     // animate page transition
+  prefetch: true,              // prefetch on mount
+});
+```
+
+Show: `useTransition` for pending state, `startTransition` + `router.push()` for non-blocking navigation, custom CSS transitions between routes using route change events, and scroll position management with `scrollTo` after navigation commit.""",
+
+"""**Debug Scenario:**
+A Next.js app uses `fetch` inside a Server Component with `cache: 'force-cache'`. After the developer runs `revalidatePath('/')`, they expect all data on the home page to refresh. But some data is still stale — specifically, data from `fetch('/api/products')` which uses a different cache tag.
+
+`revalidatePath('/')` only invalidates the route cache for `/`, not the fetch cache entries. The fetch cache uses its own tags. Show: the difference between `revalidatePath` (route cache) and `revalidateTag` (fetch cache), how to tag a `fetch` call with `{ next: { tags: ['products'] } }`, calling `revalidateTag('products')` to invalidate that specific fetch cache entry, and when to use each approach.""",
 
 ]

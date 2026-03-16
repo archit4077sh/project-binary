@@ -1,406 +1,390 @@
 """
-snippets/q_state.py — 28 FRESH State Management questions (mix of debugging + code generation)
-Zero overlap with archived set.
+snippets/q_state.py — BATCH 3: 28 brand-new State Management questions
+Zero overlap with batch1 or batch2 archives.
 """
 
 Q_STATE = [
 
 """**Task (Code Generation):**
-Implement a `createSlice` helper (Redux Toolkit–style) for Zustand that reduces boilerplate:
+Implement a `useSharedState<T>` hook that shares state between a parent and child component without prop drilling, using module-level storage:
 
 ```ts
-const userSlice = createSlice({
-  name: 'user',
-  initialState: { data: null as User | null, loading: false },
-  actions: {
-    setUser: (state, user: User) => ({ ...state, data: user }),
-    setLoading: (state, loading: boolean) => ({ ...state, loading }),
-    reset: () => ({ data: null, loading: false }),
+// Parent:
+const [count, setCount] = useSharedState<number>('counter', 0);
+
+// Any child (without props):
+const [count, setCount] = useSharedState<number>('counter', 0);
+// Changes in parent automatically update child and vice-versa
+```
+
+Show: the module-level subscription map, React's `useSyncExternalStore` for subscription, and how this differs from Context (no Provider wrapping needed) and Zustand (scoped by string key, not store reference).""",
+
+"""**Debug Scenario:**
+A shopping cart stored in Zustand shows an incorrect total after applying a discount code. The total is computed as a derived value:
+
+```ts
+const total = useStore(s => s.items.reduce((sum, i) => sum + i.price * i.qty, 0) - s.discount);
+```
+
+When `applyDiscount(code)` is dispatched, `s.discount` updates correctly. But the total shown in the header is still the old value. The header component's selector is `s => s.items.reduce(...)` — without `s.discount`. The derived total doesn't account for discount.
+
+Show the fix using a computed derived value in the store definition (Zustand's `getState()` in an action), and explain the difference between computing derived values in store actions vs in component selectors.""",
+
+"""**Task (Code Generation):**
+Build a `useTransaction<T>` hook that batches multiple state updates into an atomic transaction with rollback support:
+
+```ts
+const { begin, commit, rollback, inTransaction } = useTransaction(setState);
+
+begin();
+setState(s => ({ ...s, balance: s.balance - 100 }));  // debit
+setState(s => ({ ...s, items: [...s.items, newItem] })); // add item
+// If any step throws:
+rollback(); // reverts to pre-begin state
+// On success:
+commit(); // applies all changes at once
+```
+
+Show the snapshot-based rollback implementation, React's batching of the committed updates, and TypeScript generics for the state type.""",
+
+"""**Debug Scenario:**
+Two React Query mutations run in sequence: first `deleteUser`, then `refreshUserList`. The `refreshUserList` starts before `deleteUser` completes on the server, so the refreshed list still includes the deleted user.
+
+```ts
+const deleteUser = useMutation(deleteUserFn);
+const refreshList = useMutation(() => queryClient.invalidateQueries(['users']));
+
+// Sequential calls:
+await deleteUser.mutateAsync(userId);
+await refreshList.mutateAsync();
+// But deleteUser's server processing isn't done when refreshList fires
+```
+
+Show: using `onSuccess` callback on `deleteUser` to trigger invalidation (runs after server confirms), `await mutateAsync` vs `mutate` (which doesn't return a promise), and the difference between `invalidateQueries` (marks stale + refetches) vs `removeQueries` (clears cache).""",
+
+"""**Task (Code Generation):**
+Implement a `createPersistentAtom<T>` for Jotai with automatic localStorage persistence and cross-tab synchronization:
+
+```ts
+const themeAtom = createPersistentAtom<'light' | 'dark'>('theme', 'light', {
+  crossTabSync: true,
+  serialize: (v) => v,
+  deserialize: (v) => v as 'light' | 'dark',
+});
+```
+
+Show: the atom definition using `atomWithStorage` as inspiration (but custom implementation), the `BroadcastChannel` for cross-tab sync, the subscribe/update cycle that doesn't echo self-changes back, and TypeScript generics for the value type.""",
+
+"""**Debug Scenario:**
+A complex dashboard uses Recoil for state management. After 30 minutes of use, the app's memory grows by 400MB. Recoil DevTools shows thousands of atom snapshots being retained.
+
+Investigation reveals `useRecoilTransactionObserver_UNSTABLE` is registered without cleanup, accumulating every state snapshot in memory. Additionally, dynamically created atoms (with `atomFamily`) are never cleaned up when the monitored entities are removed from the dashboard.
+
+Show: proper cleanup of the transaction observer, `useRecoilCallback` as a memory-efficient alternative for observing specific atoms, and `useRecoilSnapshot` with careful cleanup of old snapshots.""",
+
+"""**Task (Code Generation):**
+Build a `useMachineState` hook for a simple finite state machine WITHOUT XState (pure React):
+
+```ts
+const [state, send] = useMachineState({
+  initial: 'idle',
+  states: {
+    idle:    { SUBMIT: 'loading' },
+    loading: { SUCCESS: 'success', ERROR: 'error', CANCEL: 'idle' },
+    success: { RESET: 'idle' },
+    error:   { RETRY: 'loading', RESET: 'idle' },
   },
+  onTransition: (from, to, event) => analytics.track('state_change', { from, to, event }),
 });
 
-const useUserStore = create(userSlice);
-const { setUser, setLoading } = useUserStore.getState();
+send('SUBMIT'); // transitions idle → loading
 ```
 
-Show the `createSlice` implementation with TypeScript types that infer action parameters from the reducer functions.""",
+Show: the TypeScript types for states/events, the invalid transition handling (log warning, don't change state), and a `<MachineVisualizer>` debug component.""",
 
 """**Debug Scenario:**
-A Zustand store is initialized with data fetched from an API. When the component mounts, the store has the correct data. But when the user navigates away and returns, the store shows the initial empty state — the fetched data is gone.
+A developer implements a "select all" checkbox that toggles all items in a list. Clicking "select all" when some items are already selected causes a confusing tri-state behavior:
 
-Investigation shows the store is defined inside the component:
 ```ts
-function Dashboard() {
-  const useStore = create(() => ({ data: [] })); // Re-created every render!
-}
+const [selected, setSelected] = useState<Set<string>>(new Set());
+const allSelected = selected.size === items.length;
+const someSelected = selected.size > 0 && !allSelected;
+
+<input type="checkbox" 
+  checked={allSelected} 
+  onChange={() => allSelected ? setSelected(new Set()) : setSelected(new Set(items.map(i => i.id)))}
+/>
 ```
 
-Explain why defining a Zustand store inside a component body causes a new store instance on every render, and show the correct pattern for stores that need initialization data.""",
+Show: the correct indeterminate state using `checkboxRef.current.indeterminate = someSelected`, why `indeterminate` is a DOM property not an HTML attribute (can't use JSX), the `useEffect` to sync the DOM property, and TypeScript typing for the ref with `HTMLInputElement`.""",
 
 """**Task (Code Generation):**
-Build a `useSyncedState<T>` hook that keeps state synchronized across browser tabs using `BroadcastChannel`:
+Implement a `useFormHistory` hook that tracks form changes and allows stepping through the edit history (like Google Docs):
 
 ```ts
-const [theme, setTheme] = useSyncedState<'light' | 'dark'>('theme-channel', 'light');
-// When setTheme('dark') is called in Tab A, Tab B automatically updates
-```
-
-Requirements:
-- Creates a `BroadcastChannel` with the given name
-- Broadcasts on every state change
-- Receives broadcasts from other tabs and updates local state
-- Doesn't echo back its own messages (avoid infinite loops)
-- Cleans up the channel on unmount
-
-Show the full implementation.""",
-
-"""**Debug Scenario:**
-React Query v5 is used for server state. A mutation updates a user's profile and invalidates the `['user', userId]` query. The profile header component (which uses this query) re-fetches correctly. But a sidebar component that renders the same user data doesn't update.
-
-```ts
-// Sidebar uses:
-const { data: user } = useQuery({ queryKey: ['user', userId], queryFn: getUser });
-
-// Profile uses:
-const { data: user } = useQuery({ queryKey: ['user', userId], queryFn: getProfile });
-```
-
-Diagnose: the sidebar uses `getUser` and the profile uses `getProfile` — different `queryFn` but same `queryKey`. Explain how React Query handles this case and whether two components with identical keys but different `queryFn` share cache.""",
-
-"""**Task (Code Generation):**
-Implement a `useStorageState<T>` hook that syncs to any storage backend (localStorage, IndexedDB, AsyncStorage for React Native):
-
-```ts
-// localStorage backend:
-const [token, setToken] = useStorageState('auth-token', null, localStorageAdapter);
-
-// IndexedDB backend:
-const [offline-data, setData] = useStorageState('data', [], idbAdapter);
-```
-
-Show the `StorageAdapter` interface, a `localStorageAdapter` implementation, and the hook. The hook should handle async storage backends (where reads/writes return Promises) by showing an initial loading state.""",
-
-"""**Debug Scenario:**
-A Redux Toolkit store uses `createAsyncThunk` for data fetching. After a network error, the UI shows an error message. The user dismisses the error and retries — but the retry immediately shows the previous error without making a new network request.
-
-```ts
-// Slice:
-extraReducers: builder => {
-  builder.addCase(fetchData.rejected, (state, action) => {
-    state.error = action.error.message;
-    state.status = 'failed';
-  });
-}
-// Retry:
-dispatch(fetchData()); // status is still 'failed', so UI shows error immediately
-```
-
-The status is 'failed' before the retry resolves. Show the correct pattern: clearing error state on `fetchData.pending`, and the UX implication of the loading → error → loading transition.""",
-
-"""**Task (Code Generation):**
-Build a `useFormState` hook for complex multi-field forms with:
-- Field-level validation (runs on blur, shows on submit)
-- Cross-field validation (e.g., `endDate > startDate`)
-- `isDirty`, `isValid`, `isSubmitting` flags
-- Array fields (add/remove rows dynamically)
-- `reset(values)` that resets to given values without triggering validation
-
-```ts
-const form = useFormState({
-  fields: { name: '', tags: [] as string[], startDate: '', endDate: '' },
-  validate: (values) => ({ endDate: values.endDate < values.startDate ? 'Must be after start' : null })
-});
-```""",
-
-"""**Debug Scenario:**
-A Jotai atom is derived from another atom using `atom(get => ...)`. When the base atom updates, the derived atom re-computes — but components subscribed to the derived atom don't re-render.
-
-```ts
-const baseAtom = atom<User | null>(null);
-const nameAtom = atom((get) => get(baseAtom)?.name ?? '');
-
-// In component:
-const name = useAtomValue(nameAtom); // doesn't update when baseAtom changes!
-```
-
-Investigate: is this a Jotai version issue, a component wrapping issue (missing Provider), or an atom scope issue? Show the common causes of Jotai derived atoms not triggering subscribing components and how to debug with Jotai DevTools.""",
-
-"""**Task (Code Generation):**
-Implement an `operationQueue` for offline-first apps that queues mutations when offline and replays them when connectivity is restored:
-
-```ts
-const queue = useOperationQueue({
-  onOnline: async (operations) => {
-    for (const op of operations) await replayOperation(op);
-  },
-});
-
-// Called even when offline:
-queue.enqueue({ type: 'CREATE_NOTE', payload: { title, content } });
-```
-
-Show the queue implementation using IndexedDB for persistence (so queued ops survive browser refresh), the online/offline detection, and conflict resolution if the server already has a conflicting operation.""",
-
-"""**Debug Scenario:**
-An app uses React Context for cart state. The cart has 50 items. Updating the quantity of one item causes all 50 `<CartItem>` components to re-render, shown in the Profiler.
-
-The items are correctly memoized with `React.memo`, and the `onQuantityChange` callback is wrapped in `useCallback`. The Profiler shows items re-render because the `cart` object reference changes on every update.
-
-```ts
-const [cart, setCart] = useState<CartItem[]>([]);
-// Context value:
-<CartContext.Provider value={{ cart, updateItem, removeItem }}>
-```
-
-Show the fix using separate contexts (data vs actions), or `useMemo` for the context value, and explain why separating reads from writes is the key insight.""",
-
-"""**Task (Code Generation):**
-Build a `useCommandHistory` hook for implementing undo/redo with the Command pattern:
-
-```ts
-interface Command<T> {
-  execute: (state: T) => T;
-  undo: (state: T) => T;
-  description: string;
-}
-
-const { state, execute, undo, redo, history } = useCommandHistory<TextDocument>(initialDoc);
-
-execute({
-  description: 'Insert text at cursor',
-  execute: (doc) => insertText(doc, cursor, text),
-  undo: (doc) => deleteText(doc, cursor, text.length),
+const { values, setValue, history, historyIndex, jumpTo, stepBack, stepForward } = useFormHistory({
+  initial: { name: '', email: '' },
+  maxHistory: 100,
+  debounce: 500, // new history entry after 500ms of no changes
 });
 ```
 
-Show the implementation with max history depth, batch command support (multiple actions as one undo step), and a history panel component.""",
+Show: the debounced history push (rapid keystrokes → one history entry), the `jumpTo(index)` for time-travel, the `diff` utility that shows what changed between history entries, and a history timeline UI component.""",
 
 """**Debug Scenario:**
-Valtio (proxy-based state) is used for a real-time dashboard. Deeply nested state mutations work correctly in dev mode but in production, some components don't update after mutations to nested properties.
+An RTK (Redux Toolkit) slice uses `createEntityAdapter`. After a `setAll` action that replaces all entities, `selectAll` returns the entities in insertion order instead of the expected `sortComparer` order.
 
 ```ts
-const state = proxy({ dashboard: { filters: { status: 'all' } } });
-// In action:
-state.dashboard.filters.status = 'active'; // works in dev, sometimes not in prod
+const adapter = createEntityAdapter<Product>({
+  sortComparer: (a, b) => a.name.localeCompare(b.name),
+});
+// After:
+adapter.setAll(state, products); // ← products are not re-sorted
 ```
 
-Investigate: does Valtio require `structuredClone` or spread for nested updates, or does it track mutations via Proxy traps at all depths? Explain the difference between Valtio's proxy and MobX's observable for deeply nested state.""",
+Investigation reveals `setAll` stores entities in the provided order, but `sortComparer` is only applied during `addOne`, `addMany`, `upsertOne`. Show: the bug in `setAll` behavior (by design), the workaround of sorting before calling `setAll`, and using a memoized `selectSortedAll` selector that uses `sortComparer` post-hoc.""",
 
 """**Task (Code Generation):**
-Implement `createContextStore<T>` — a factory that creates a React Context-based store with Zustand-like selector subscriptions:
+Build a `useCollaborativeState<T>` hook for shared state across users using WebSockets:
 
 ```ts
-const UserStore = createContextStore({ name: '', role: 'user' as 'user' | 'admin' });
-
-// In component — only re-renders when 'role' changes:
-const role = UserStore.useSelector(s => s.role);
-const { setState } = UserStore.useStore();
-```
-
-The selector must use `Object.is` comparison to prevent re-renders for equal values. Show the implementation using `useRef` + `useSyncExternalStore`.""",
-
-"""**Debug Scenario:**
-An e-commerce app uses Redux for cart state. The `cartItems` selector is an expensive computation (applies discounts, calculates totals). The selector runs on every action dispatch — including unrelated actions like `SET_MODAL_OPEN`.
-
-```ts
-const cartTotal = useSelector(state => 
-  state.cart.items.reduce((total, item) => total + calculatePrice(item), 0)
+const { state, setState, collaborators, isConnected } = useCollaborativeState<BoardState>(
+  'board-session-123',
+  initialBoardState
 );
+// state synced across all connected clients
+// collaborators shows who else is connected with their cursors
 ```
 
-Show how `reselect` memoizes this selector with `createSelector`, why memoization depends on input selector reference equality, and the correct pattern when `calculatePrice` itself depends on state from another slice.""",
-
-"""**Task (Code Generation):**
-Build a `useWebSocketStore` that provides real-time state updates via WebSocket while maintaining optimistic updates for mutations:
-
-```ts
-const { data: reports, updateReport, isConnected } = useWebSocketStore('/ws/reports');
-
-// Optimistic update:
-updateReport(id, { status: 'closed' }); // instantly updates UI
-// If WS server sends back conflicting data, reconcile:
-// Server data wins; show conflict notification
-```
-
-Show the Zustand store setup, the WebSocket subscription logic, the optimistic update + rollback pattern, and the conflict detection.""",
+Show: the WebSocket connection management, delta-based updates (send only changed fields), conflict resolution (last-write-wins with vector timestamps), presence tracking (user cursors/selections), and reconnection state reconciliation (client requests full state from server on reconnect).""",
 
 """**Debug Scenario:**
-Using React Query's `useInfiniteQuery` for a paginated list, the `fetchNextPage` function is called but the new page data is appended to the top of the list instead of the bottom.
+A React app using MobX `observable` shows a stale value in a component that reads from an `@computed` property. The computed value depends on an observable but isn't updating when the observable changes.
 
 ```ts
-const { data, fetchNextPage } = useInfiniteQuery({
-  queryKey: ['items'],
-  queryFn: ({ pageParam = 0 }) => fetchPage(pageParam),
-  getNextPageParam: (lastPage) => lastPage.nextCursor,
-});
-
-// Rendering:
-data.pages.flatMap(page => page.items).reverse() // Bug: reversal here
-```
-
-Diagnose how the `reverse()` combined with `getNextPageParam` causes the visual ordering problem, and show the correct rendering order with correct cursor-based pagination configuration.""",
-
-"""**Task (Code Generation):**
-Implement a `useRealtimeQuery<T>` hook that combines initial data from React Query with real-time WebSocket updates:
-
-```ts
-const { data: orders } = useRealtimeQuery<Order[]>({
-  queryKey: ['orders'],
-  queryFn: fetchOrders,
-  wsChannel: 'orders:updates',
-  onMessage: (current, event) => {
-    if (event.type === 'ORDER_CREATED') return [...current, event.order];
-    if (event.type === 'ORDER_UPDATED') return current.map(o => o.id === event.order.id ? event.order : o);
-    return current;
-  },
-});
-```
-
-Show the implementation, how it keeps the React Query cache in sync with WebSocket events, and how to handle the race condition between initial fetch and incoming events during load.""",
-
-"""**Debug Scenario:**
-A Zustand middleware called `persist` is used to save store state to localStorage. After the user logs out and a new user logs in, the previous user's data briefly appears because the persisted state loads before the login completes.
-
-```ts
-const useStore = create(
-  persist(
-    (set) => ({ user: null, preferences: {} }),
-    { name: 'app-store', storage: createJSONStorage(() => localStorage) }
-  )
-);
-```
-
-Design a secure logout flow that: clears the persisted state, resets all Zustand stores, and prevents the stale state flash. Show how to handle Zustand's `persist` hydration timing relative to the auth check.""",
-
-"""**Task (Code Generation):**
-Build a `useModalState` hook that manages a stack of modals with:
-- `push(modalId, props)` — opens a new modal on top of the stack
-- `pop()` — closes the top modal
-- `close(modalId)` — closes a specific modal anywhere in the stack
-- Keyboard handler: `Escape` closes the top modal
-- Prevents body scroll when any modal is open
-- Supports animated exit (modal stays in DOM until animation completes)
-
-Show the hook, the `ModalStack` provider, and a `<ModalRenderer>` that renders all active modals.""",
-
-"""**Debug Scenario:**
-A team uses Immer with Redux Toolkit's `createSlice`. A reducer that filters an array is accidentally mutating state instead of returning a new array, but Immer swallows the error silently.
-
-```ts
-reducers: {
-  removeItem: (state, action) => {
-    state.items = state.items.filter(item => item.id !== action.payload);
-    // Should work — but combined with another line:
-    return state; // Bug: returning draft state breaks Immer
+class Store {
+  @observable items: Item[] = [];
+  @computed get totalCount() {
+    return this.items.length; // Not updating!
   }
 }
 ```
 
-Explain Immer's two modes (mutate draft vs return new value) and why returning the draft causes subtle bugs. Show the correct Immer reducer patterns and how to detect this bug with Immer's `current()` helper.""",
+Investigation reveals the `items` array is mutated directly (`store.items.push(item)`) instead of using MobX-observable assignment. MobX tracks reads, not mutations of non-observable structures. Show: using `store.items = [...store.items, item]` (reassignment), or wrapping with `@action runInAction(() => { store.items.push(item); })`, and why direct mutation bypasses MobX's tracking.""",
 
 """**Task (Code Generation):**
-Implement a `useAutoSave` hook that automatically saves form data to the server after a period of inactivity:
+Implement a `useEventSourcing<T>` hook where state is derived from an append-only event log:
 
 ```ts
-const { isSaving, lastSaved, error } = useAutoSave({
-  data: formValues,
-  saveFn: async (data) => api.patch('/drafts/1', data),
-  debounce: 2000, // save 2s after last change
-  onConflict: (localData, serverData) => resolveConflict(localData, serverData),
+const { state, dispatch, events, replayFrom } = useEventSourcing<CartState>({
+  initialState: { items: [], total: 0 },
+  reducer: cartReducer,
+  eventStore: localStorageEventStore, // persists events
+});
+
+dispatch({ type: 'ADD_ITEM', item: product });
+// state updated by replaying all events
+// replayFrom(timestamp) for time-travel debugging
+```
+
+Show: the event store interface, local replay on startup (rehydrates from event log), the `replayFrom` function for debugging, and how this differs from storing state directly (audit log, time travel, replay).""",
+
+"""**Debug Scenario:**
+A `useAsync` hook caches the result of an async operation but the cache is never invalidated, causing stale data to be shown indefinitely after the user updates their profile:
+
+```ts
+const [cache] = useState(() => new Map<string, unknown>());
+
+async function fetchCached<T>(key: string, fn: () => Promise<T>): Promise<T> {
+  if (cache.has(key)) return cache.get(key) as T;
+  const result = await fn();
+  cache.set(key, result);
+  return result;
+}
+```
+
+The `cache` is in component state, so it persists for the component's lifetime but is never invalidated on profile update. Show: adding a `invalidate(key)` function, TTL-based expiry, and integration with a mutation hook that invalidates the relevant cache keys on success (similar to React Query's `invalidateQueries`).""",
+
+"""**Task (Code Generation):**
+Build a `useGlobalKeyboardState` hook for tracking which keys are currently pressed:
+
+```ts
+const { isKeyDown, pressedKeys } = useGlobalKeyboardState();
+
+// Multi-key detection:
+const isCtrlZ = isKeyDown('Control') && isKeyDown('z');
+const isPressedKeys = pressedKeys.has('Shift') && pressedKeys.has('Enter');
+```
+
+Show: `Set<string>` for tracking multiple simultaneous keys, `keydown` and `keyup` event handlers on `window`, cleanup on unmount and on `blur` (release all keys when window loses focus to prevent stuck keys), and React `useSyncExternalStore` for subscribing without re-rendering on every keypress.""",
+
+"""**Debug Scenario:**
+A Zustand store action is supposed to atomically update two slices of state, but due to React's render batching, a component reads an inconsistent state (one slice updated, the other not yet).
+
+```ts
+// Action that must be atomic:
+updateCartAndInventory: (item) => set(s => ({
+  cart: [...s.cart, item],     // update 1
+  inventory: s.inventory.filter(i => i.id !== item.id), // update 2
+})),
+```
+
+Actually, a single `set(fn)` call IS atomic in Zustand. Show why the developer might incorrectly think it's non-atomic (confusing two separate `set()` calls with one combined), demonstrate the non-atomic version that causes the bug, and the fix using a single combined state update function.""",
+
+"""**Task (Code Generation):**
+Implement a `useDataSync` hook for syncing local state with a remote database in real-time:
+
+```ts
+const { data, updateLocal, syncStatus, conflicts } = useDataSync<Note>({
+  id: 'note-123',
+  localGet: () => indexedDB.get('note-123'),
+  localSet: (data) => indexedDB.set('note-123', data),
+  remoteGet: () => api.getNote('123'),
+  remoteSet: (data) => api.updateNote('123', data),
+  conflictResolver: (local, remote) => mergeByTimestamp(local, remote),
+  syncInterval: 30_000,
 });
 ```
 
-Features:
-- Debounced save on data change
-- Shows "Saving..." and "Last saved at HH:MM" in UI
-- Detects server conflicts (server version != local version)
-- Retries on network failure (exponential backoff)""",
+Show: the sync lifecycle (idle → syncing → synced → conflict), optimistic local writes, conflict detection using `updatedAt` timestamps, and the IndexedDB integration.""",
 
 """**Debug Scenario:**
-An RTK Query endpoint has `providesTags: [{ type: 'User', id: 'LIST' }]`. A mutation has `invalidatesTags: [{ type: 'User', id: 'LIST' }]`. After the mutation fires, the user list doesn't refresh.
+A React Context provides a search query string that many components subscribe to. When the user types in the search input (very fast), every keystroke causes all subscribing components to re-render even if their own displayed content doesn't depend on the raw query.
 
-```ts
-// Mutation:
-invalidatesTags: (result) => result ? [{ type: 'User', id: 'LIST' }] : []
-```
+Components that filter their own data re-render on every keypress, even if the query is too short to match any of their items yet.
 
-The `invalidatesTags` function returns an empty array when `result` is falsy — and the mutation's `result` is undefined on success (the endpoint returns 204 No Content). Fix the tag invalidation and explain RTK Query's tag system including list vs entity tags.""",
+Show: debouncing the context value (`useDebounce` → debounced context provider), splitting the context (raw query for the input, debounced query for results), and `useDeferredValue` on the consuming side as a lighter-weight alternative.""",
 
 """**Task (Code Generation):**
-Implement a finite state machine using XState v5 for a multi-step file upload flow:
+Build a type-safe `createActions<S>` factory that generates Redux-style actions from a reducer map with automatic action creator functions:
 
-```
-idle → selecting → uploading → processing → success
-                ↘ cancelled        ↘ failed → retrying → uploading
+```ts
+const { actions, reducer } = createActions<CartState>()({
+  addItem: (state, item: CartItem) => ({ ...state, items: [...state.items, item] }),
+  removeItem: (state, id: string) => ({ ...state, items: state.items.filter(i => i.id !== id) }),
+  clearCart: (state) => ({ ...state, items: [] }),
+  setDiscount: (state, discount: number) => ({ ...state, discount }),
+});
+
+// Fully typed action creators:
+dispatch(actions.addItem({ id: '1', price: 100 })); // ✓
+dispatch(actions.addItem('wrong'));                  // ✗ TypeScript error
 ```
 
-Show:
-1. The XState machine definition with guards and actions  
-2. A `useUpload` hook wrapping the machine
-3. A `<UploadProgress>` component driven by the machine state
-4. How to cancel an in-progress upload and clean up resources""",
+Show the TypeScript type inference that derives action creator signatures from reducer function parameters.""",
 
 """**Debug Scenario:**
-React Query is set up with `staleTime: Infinity` for configuration data that rarely changes. After a backend deployment updates the config, users don't see the new values until they hard refresh.
+A complex modal manages its own local state AND reads from Redux. When the modal is closed and reopened, the local state (form fields) is reset correctly, but the Redux-sourced data is stale because the Redux slice wasn't invalidated when the modal closed.
 
-The team adds `staleTime: 5 * 60 * 1000` (5 minutes) to fix this. But now every component instance that mounts re-fetches the config if 5 minutes have passed, causing 10 simultaneous identical API calls.
+The modal mounts fresh on each open (key prop changes) so local state resets. But `useSelector(s => s.modalData)` returns the cached Redux data from the previous modal session.
 
-Explain React Query's deduplication of concurrent fetches for the same query key, why in-flight deduplication works but stale query deduplication doesn't save all component mounts, and the correct `staleTime` + `gcTime` combination for shared config data.""",
+Show: dispatching a `resetModalData` action in the modal's `useEffect` cleanup (runs on unmount), why the action dispatch timing matters relative to the key-based remount, and the alternative of reading fresh data via a React Query fetch inside the modal (avoids Redux stale state).""",
 
 """**Task (Code Generation):**
-Build a `useOptimisticList<T>` hook for managing lists with optimistic CRUD operations:
+Implement a `useWatchdog<T>` hook that monitors a state value and alerts when it hasn't changed in a given time window:
 
 ```ts
-const { items, addItem, updateItem, removeItem, pendingIds } = useOptimisticList<Product>({
-  queryKey: ['products'],
-  mutations: {
-    add: createProduct,
-    update: updateProduct,
-    remove: deleteProduct,
+const { isStalled, stallDuration, resetWatchdog } = useWatchdog(fileUploadProgress, {
+  stallThreshold: 10_000, // alert if no progress for 10 seconds
+  onStall: () => {
+    showRetryDialog();
+    cancelCurrentUpload();
   },
+  onRecover: () => dismissRetryDialog(),
 });
 ```
 
-- `addItem` shows the item immediately with a temp ID, replaces with server ID on success
-- `updateItem` shows changes immediately, reverts on failure
-- `removeItem` hides the item immediately, restores on failure
-- `pendingIds` tracks which items have in-flight mutations (for loading indicators)""",
+Show: the `useEffect` that resets a timeout on every value change, the `isStalled` state transition, auto-recovery detection (value changes after stall), and cleanup on unmount that cancels both the stall timeout and any recovery timer.""",
 
 """**Debug Scenario:**
-A server-side Redux store is created per-request in a Next.js API route. But some production users see state from other users' requests — a state leakage bug.
+A React Native app uses Redux Persist with AsyncStorage. After the app updates to a new version that changes the Redux state shape, users see runtime errors because the persisted state doesn't match the new reducers.
 
 ```ts
-// lib/store.ts
-export const store = configureStore({ reducer }); // Module-level singleton!
+// Old state: { user: { name: string, id: string } }
+// New state: { user: { displayName: string, userId: string } } ← field names changed
 ```
 
-This is the same bug as the earlier Next.js server component example but in Redux. If multiple concurrent requests share the same store, dispatching actions for User A's request mutates state that User B's request then reads. Show the correct per-request store pattern and explain how Next.js's module bundling makes server-side singletons dangerous.""",
+Redux Persist loads the old shape from AsyncStorage and passes it directly to the new reducers. Show: the `migrate` function in Redux Persist config that handles version-to-version state shape migrations, version incrementing, and a `createMigrate(migrations)` setup for multi-version apps.""",
 
 """**Task (Code Generation):**
-Build a `usePageLeaveGuard` hook that prevents the user from accidentally navigating away from a form with unsaved changes:
+Build a `useConflictResolution` hook for merging concurrent edits in a shared document editor:
 
 ```ts
-const { isDirty, setDirty } = usePageLeaveGuard({
-  message: 'You have unsaved changes. Leave anyway?',
-  enabled: formIsDirty,
+const { localVersion, remoteVersion, mergedVersion, conflict, resolveConflict } = useConflictResolution({
+  local: localDocument,
+  remote: remoteDocument,
+  merger: threeWayMerge, // uses common ancestor
+  onConflict: (conflictedFields) => showConflictUI(conflictedFields),
 });
 ```
 
-Requirements:
-- Intercepts browser `beforeunload` event (for tab close / refresh)
-- Intercepts Next.js client-side navigation via `router.events` (App Router)
-- Shows a confirmation dialog before allowing navigation
-- Automatically disables when the form is saved (`enabled: false`)
-- TypeScript-compatible with `useFormState` or react-hook-form's `isDirty`""",
+Show: the three-way merge algorithm for JSON objects (ancestor + local + remote → merged), conflict detection (same field changed differently in local and remote), the UI for manual conflict resolution, and how changes are rebased after remote updates arrive.""",
 
 """**Debug Scenario:**
-A `useShoppingCart` hook uses `useReducer` internally. The `ADD_ITEM` action is dispatched from a `<ProductCard>` component deep in the tree. After adding items rapidly by clicking multiple cards, some additions are lost — the cart shows fewer items than expected.
+A developer uses React's `unstable_batchedUpdates` from `react-dom` to batch state updates in a non-React event handler. After upgrading to React 18, the code still uses this API even though React 18 automatically batches all updates.
 
 ```ts
-onClick={() => dispatch({ type: 'ADD_ITEM', payload: product })}
-// Multiple rapid clicks: only 1 of 3 items added
+// Old code (React 17 needed this):
+import { unstable_batchedUpdates } from 'react-dom';
+unstable_batchedUpdates(() => {
+  setState1(a);
+  setState2(b);
+});
+
+// React 18: automatic batching makes this unnecessary
 ```
 
-The bug occurs because `React.StrictMode` double-invokes reducers in development — but the symptom appears in production too. Diagnose: is this a reducer purity issue (side effects inside reducer), an event handler closure issue, or a batching timing issue? Show a reproducible example and the fix.""",
+Show: why React 18's automatic batching makes `unstable_batchedUpdates` unnecessary in most cases, the one remaining case where `flushSync` (not `batchedUpdates`) is still needed, and how to detect if your app still relies on the old manual batching behavior.""",
+
+"""**Task (Code Generation):**
+Implement a `useQueryParam<T>` hook for managing state in URL query parameters:
+
+```ts
+const [sortOrder, setSortOrder] = useQueryParam<'asc' | 'desc'>('sort', 'asc');
+const [page, setPage] = useQueryParam<number>('page', 1, {
+  parse: Number,
+  serialize: String,
+});
+
+// URL: /products?sort=desc&page=2
+```
+
+Show: reading from `window.location.search`, writing via `history.pushState` (not full navigation), TypeScript generic with custom parser/serializer, array values (`tags=a&tags=b`), and Next.js App Router integration using `useSearchParams` + `useRouter`.""",
+
+"""**Debug Scenario:**
+A `useReducer`-based form uses a `SET_FIELD` action to update fields. When two fields have the same name (e.g., two address forms on the same page), updating one corrupts the other.
+
+```ts
+dispatch({ type: 'SET_FIELD', name: 'street', value: '123 Main' });
+// Updates BOTH address forms' street field
+```
+
+The reducer doesn't have a concept of form identity — both forms share the same reducer and state scope. Show: namespacing the action with a `formId` field, extracting each form into isolated component state (using `useReducer` locally instead of globally), and a factory pattern for creating independent reducer instances with TypeScript.""",
+
+"""**Task (Code Generation):**
+Implement a `useSelector` hook for plain objects (no Redux) that efficiently subscribes to nested state changes:
+
+```ts
+const appState = createObservableState({ user: null, settings: { theme: 'light', lang: 'en' } });
+
+// Component A — only re-renders when user changes:
+const user = appState.useSelector(s => s.user);
+
+// Component B — only re-renders when theme changes:
+const theme = appState.useSelector(s => s.settings.theme);
+```
+
+Show: the observable state using `useSyncExternalStore`, how selector memoization prevents re-renders when the selector returns the same value, lens-based state updates (`appState.update('settings.theme', 'dark')`), and TypeScript path-based type inference for the `update` function.""",
+
+"""**Debug Scenario:**
+A Redux DevTools time-travel feature causes errors when jumping to past states in a production-like app. The error is:
+
+```
+Error: Cannot read property 'data' of undefined
+```
+
+When time-traveling, the Redux state reverts, but browser side-effects (IndexedDB writes, network requests that completed) are not reversed. A component reads from both Redux state and directly from IndexedDB, creating inconsistency.
+
+Explain why Redux DevTools can only revert Redux state (not I/O side-effects), show how to make side effects Redux-aware using `redux-observable` or `redux-saga` so that epics/sagas can be replayed during time travel, and the simpler fix: reading all state exclusively from Redux (sync IndexedDB reads into Redux state on load).""",
 
 ]
