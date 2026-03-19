@@ -1,425 +1,501 @@
 """
-snippets/q_testing.py — BATCH 3: 28 brand-new Testing questions
-Zero overlap with batch1 or batch2 archives.
+snippets/q_testing.py — BATCH 4: 28 brand-new Testing questions
+Zero overlap with batch1, batch2, or batch3 archives.
 """
 
 Q_TESTING = [
 
 """**Task (Code Generation):**
-Implement a custom React Testing Library `renderWithProviders` utility that wraps components with all global providers:
+Implement a `renderAccessible` utility that extends RTL's `render` with automatic accessibility checks:
 
 ```ts
-const { getByRole, user } = renderWithProviders(
-  <UserProfile userId="1" />,
+const { getByRole, violations } = await renderAccessible(<NavigationMenu />);
+// Auto-runs axe-core after every render
+expect(violations).toHaveLength(0);
+
+// Also validates WCAG requirements on re-render:
+await userEvent.click(getByRole('button', { name: 'Open Menu' }));
+expect(violations).toHaveLength(0); // checked again after interaction
+```
+
+Show: integrating `jest-axe` with RTL's `render` function, running `axe` after each `act()` completes, collecting violations with `toHaveNoViolations()`, configuring axe rules to disable for known false-positives (`aria-required-children` for custom list patterns), and TypeScript types for the extended render result.""",
+
+"""**Debug Scenario:**
+A test for a component that uses `IntersectionObserver` fails with:
+
+```
+ReferenceError: IntersectionObserver is not defined
+```
+
+JSDOM (the Jest/Vitest test environment) doesn't implement `IntersectionObserver`. Show: two approaches — (1) a manual mock in `jest.setup.ts` (`global.IntersectionObserver = MockIntersectionObserver` class with `observe`, `unobserve`, `disconnect` methods), (2) the `jest-intersect-observer` npm package which provides a mock automatically, and how to trigger intersection callbacks in tests using `mockObserver.triggerIntersect(element, { isIntersecting: true })`.""",
+
+"""**Task (Code Generation):**
+Build a `componentStoryFactory` for generating Storybook stories from component props automatically:
+
+```ts
+const stories = componentStoryFactory(Button, {
+  variants: {
+    variant: ['primary', 'secondary', 'ghost', 'danger'],
+    size:    ['sm', 'md', 'lg'],
+    disabled: [false, true],
+  },
+  excludeCombinations: [{ variant: 'ghost', disabled: true }],
+  defaultArgs: { children: 'Click me', onClick: fn() },
+});
+// Generates: 4 × 3 × 2 - 1 = 23 stories automatically
+```
+
+Show: the factory that produces `Meta` and individual `Story` exports, the CSV story naming (`Primary-Md-Enabled`), Chromatic visual testing integration (all generated stories are automatically screenshotted), and using the `satisfies` TypeScript operator to validate story types.""",
+
+"""**Debug Scenario:**
+A React Testing Library test uses `screen.getByRole('button', { name: 'Submit' })` but throws:
+
+```
+Found multiple elements with the role "button" and name "Submit"
+```
+
+The page has two "Submit" buttons — one in the main form and one in a confirmation dialog that appears after submission. The test only intends to click the main form's button.
+
+Show: scoping queries with `within()` (`within(screen.getByRole('dialog', { name: 'Confirm' })).getByRole('button')`), `getAllByRole('button')` + `[0]` to get the first matching button, the `exact: true` option for more specific matching, and refactoring the UI to have more descriptive accessible names (`aria-label` or `aria-labelledby`) to avoid ambiguity.""",
+
+"""**Task (Code Generation):**
+Implement a `patchServer` testing utility for simulating partial API updates in tests:
+
+```ts
+const server = createPatchServer(defaultHandlers);
+
+// In one test, override only the users endpoint:
+server.patch({
+  'GET /api/users': { status: 200, body: [mockAdmin] }, // only admins
+});
+// All other endpoints use defaults
+
+// In another test, simulate a failure:
+server.patch({
+  'POST /api/orders': { status: 500, body: { error: 'Database down' } },
+});
+```
+
+Show: the base handler store, the `patch()` method that overwrites specific handlers for the test's lifetime, automatic restoration after test completion using `afterEach`, and TypeScript that validates the handler keys match the registered route patterns.""",
+
+"""**Debug Scenario:**
+A component test using `userEvent.type` types the correct string but the `onChange` handler receives characters in the wrong order. Characters appear interleaved:
+
+```ts
+await userEvent.type(input, 'abc{enter}');
+// onChange fires with: 'a', 'ab', 'abc', then form submits — but in test, fires as 'a', 'b', 'c', submits
+```
+
+Within `userEvent.type`, characters are typed one by one sequentially — this should be deterministic. The issue is the component has a `setImmediate` delay between `onChange` and `setValue`, and the test doesn't await the asynchronous state update between keystrokes.
+
+Show: using `userEvent.setup({ delay: null })` in the pointer setup to disable the typing delay, adding `await` between type calls, and RTL's `act()` wrapper for ensuring all state updates flush before assertions.""",
+
+"""**Task (Code Generation):**
+Build a `testComponentPerformance` utility that asserts render count and timing budgets:
+
+```ts
+const perf = await testComponentPerformance(
+  <SearchResults query="laptop" items={mockItems} />,
   {
-    preloadedState: { auth: { user: mockUser } },
-    queryClient: createTestQueryClient(),
-    router: { pathname: '/profile/1' },
+    renderBudget: { count: 2, duration: 16 }, // max 2 renders, each < 16ms
+    interactionBudget: { duration: 50 },       // interactions complete < 50ms
+    interactions: async (utils) => {
+      await userEvent.clear(screen.getByRole('searchbox'));
+      await userEvent.type(screen.getByRole('searchbox'), 'tablet');
+    },
   }
 );
+
+expect(perf.renderCount).toBeLessThanOrEqual(2);
+expect(perf.maxRenderDuration).toBeLessThan(16);
 ```
 
-Show: the wrapper with all providers (Redux, React Query, NextRouter mock, Theme), the `userEvent.setup()` integration, a factory for pre-configured test QueryClient (no retries, no cache time), and TypeScript generics for the `preloadedState` type derived from the Redux root state.""",
+Show: `<Profiler>` integration, timing collection via `performance.now()`, and a failing assertion message that includes the render timeline.""",
 
 """**Debug Scenario:**
-A test for a form submit handler passes locally but fails flakily in CI:
+A snapshot test fails with a diff showing only the generated UUID changed:
 
-```ts
-test('submits form', async () => {
-  render(<ContactForm />);
-  await userEvent.type(screen.getByRole('textbox', { name: 'Email' }), 'test@example.com');
-  await userEvent.click(screen.getByRole('button', { name: 'Submit' }));
-  expect(screen.getByText('Thank you!')).toBeInTheDocument();
-});
+```diff
+-  <div class="modal" id="modal-3a8b1c2d">
++  <div class="modal" id="modal-7f2e9a1b">
 ```
 
-CI machines are slower and the async state update (after form submit API call) completes after the assertion. `getByText` doesn't wait for the element to appear. Show: replacing `getByText` with `findByText` (which returns a Promise and polls), the `waitFor` wrapper for complex async assertions, and setting `fakertimers: { now: Date.now() }` to fix time-dependent flakiness.""",
+The modal generates a random ID on every render for `aria-labelledby` / `aria-describedby` association. The snapshot test is fragile — any render generates a new random ID.
+
+Show: mocking `Math.random()` in the test setup to return a deterministic value (`jest.spyOn(Math, 'random').mockReturnValue(0.5)`), using a sequential counter ID generator in the component (resets in tests), snapshotting with `id: expect.any(String)` using `jest.toMatchInlineSnapshot` with `.replaceAll(/#[a-z0-9-]+/g, '#STABLE_ID')` normalization, and why injecting the ID as a prop (for tests) is the cleanest solution.""",
 
 """**Task (Code Generation):**
-Build a `mockComponentTree` testing utility that replaces deep child components with test doubles:
+Implement a `generateE2ETestData` seeding utility that creates test data before Playwright runs:
 
 ```ts
-const { mocks } = mockComponentTree(<UserDashboard />, {
-  UserProfile: (props) => <div data-testid="mock-profile" data-user-id={props.userId} />,
-  ActivityFeed: () => <div data-testid="mock-feed" />,
+// playwright.config.ts:
+export default defineConfig({
+  globalSetup: './e2e/global-setup.ts',
 });
 
-// Now test UserDashboard in isolation without real UserProfile/ActivityFeed
-expect(screen.getByTestId('mock-profile')).toHaveAttribute('data-user-id', '123');
+// e2e/global-setup.ts:
+export default async function globalSetup() {
+  const testData = await seedTestData({
+    users: [
+      { email: 'admin@test.com', password: 'TestPass123!', role: 'admin' },
+      { email: 'user@test.com',  password: 'TestPass123!', role: 'user' },
+    ],
+    products: generateProducts(50),
+  });
+  process.env.TEST_ADMIN_TOKEN = await createAuthToken(testData.admin);
+}
 ```
 
-Show: the Jest `jest.mock()` factory pattern, the utility that auto-generates test IDs, how to capture props passed to mocked components for assertions, and why this is better than shallow rendering (tests actual DOM interactions).""",
+Show: the global setup that calls seeding APIs or directly seeds the test database, storing auth tokens in `process.env` for test access, the `globalTeardown` that cleans up test data, and using Playwright's `storageState` to persist the admin login session across all tests.""",
 
 """**Debug Scenario:**
-A Vitest test for an async hook times out after 5 seconds:
+A Vitest test suite using `vi.useFakeTimers()` causes subsequent tests to hang because timers aren't restored:
 
 ```ts
-test('fetches user data', async () => {
-  const { result } = renderHook(() => useUser('1'));
-  await waitFor(() => expect(result.current.data).toBeDefined());
-  // Timeout!
-});
-```
-
-`useUser` calls `fetch()` which isn't mocked. In Vitest, `fetch` is not available by default (Node.js environment). Show: setting up MSW (Mock Service Worker) for Vitest with the `msw/node` server, the `beforeAll/afterAll/afterEach` setup in `vitest.setup.ts`, and configuring `globalThis.fetch` using `undici` as the polyfill for Node.js environments.""",
-
-"""**Task (Code Generation):**
-Implement a `createApiMockServer` factory using MSW 2.0 for integration tests:
-
-```ts
-const server = createApiMockServer({
-  'GET /api/users': (req, res, ctx) => res(ctx.json(mockUsers)),
-  'POST /api/users': async (req, res, ctx) => {
-    const body = await req.json();
-    return res(ctx.json({ ...body, id: 'new-id' }));
-  },
-  'GET /api/users/:id': (req, res, ctx) => {
-    const { id } = req.params;
-    const user = mockUsers.find(u => u.id === id);
-    return user ? res(ctx.json(user)) : res(ctx.status(404));
-  },
-});
-
-beforeAll(() => server.listen());
-afterEach(() => server.resetHandlers());
-afterAll(() => server.close());
-```
-
-Show: MSW 2.0 handler syntax, per-test handler overrides with `server.use()`, error scenario simulation, and TypeScript types for handler config.""",
-
-"""**Debug Scenario:**
-End-to-end Playwright tests pass on CI's Linux environment but fail on a developer's Windows machine with:
-
-```
-Error: Cannot find element with locator: .nav-item >> text="Dashboard"
-```
-
-Investigation reveals the app uses CSS `text-transform: uppercase`. The text "Dashboard" is visually displayed as "DASHBOARD" on Windows (certain font rendering differences) but the DOM text content is "Dashboard". Playwright's `text=` locator matches DOM text, not CSS-rendered text.
-
-Show: using `getByRole('link', { name: /dashboard/i })` (case-insensitive) instead of text locator, comparing `textContent` vs `innerText` when debugging, and writing a custom matcher that uses `getComputedStyle` to account for `text-transform`.""",
-
-"""**Task (Code Generation):**
-Build a `testFactory` pattern for generating typed test fixtures:
-
-```ts
-const userFactory = createFactory<User>({
-  defaults: {
-    id: () => crypto.randomUUID(),
-    name: 'Alice Johnson',
-    email: () => `user-${Date.now()}@example.com`,
-    role: 'user',
-    createdAt: () => new Date(),
-  },
-});
-
-const admin = userFactory.build({ role: 'admin', name: 'Bob Admin' });
-const users = userFactory.buildList(10);
-const [alice, bob] = userFactory.buildList(2, [
-  { name: 'Alice' },
-  { name: 'Bob' },
-]);
-```
-
-Show: the factory type inferring defaults from the type parameter, overrides merging, list generation, and a `create` method that persists to a test database.""",
-
-"""**Debug Scenario:**
-A React component test uses `jest.spyOn(console, 'error')` to suppress React's prop-type warnings but the spy leaks between tests because the `mockRestore()` isn't called in `afterEach`:
-
-```ts
-beforeEach(() => {
-  jest.spyOn(console, 'error').mockImplementation(() => {});
-});
-// Missing: afterEach(() => jest.restoreAllMocks());
-```
-
-Show: the correct setup/teardown, using `jest.restoreAllMocks()` in `afterEach` to prevent cross-test pollution, configuring Jest's `restoreMocks: true` in `jest.config.js` for automatic restoration, and why `mockReset()` vs `mockRestore()` vs `mockClear()` differ (clears calls / resets implementation / restores original).""",
-
-"""**Task (Code Generation):**
-Implement a snapshot testing utility for design system components that catches visual regressions:
-
-```ts
-// Generates stable snapshots with semantic selectors:
-const tree = renderToSnapshot(<Button variant="primary" size="lg">Click me</Button>, {
-  excludeProps: ['onClick', 'style'],   // ignore ephemeral props
-  normalizeClassNames: true,            // sort classes alphabetically
-  prettify: true,                       // format HTML
-});
-
-expect(tree).toMatchSnapshot();
-```
-
-Show: the custom serializer that excludes volatile props, class name normalization (CSS Modules generate hash-based names), integration with Storybook's `storyshots` addon, and the workflow for updating snapshots after intentional changes.""",
-
-"""**Debug Scenario:**
-An accessibility test using `jest-axe` reports no violations but users with screen readers report that a modal is inaccessible. The test is:
-
-```ts
-const { container } = render(<Modal isOpen={false} />);
-const results = await axe(container);
-expect(results).toHaveNoViolations();
-```
-
-The modal is tested while closed (`isOpen={false}`). Open-state accessibility violations (missing `aria-modal`, `role="dialog"`, focus management) are never checked. Show: testing the modal in its open state, using `userEvent.click` to open the modal before axe analysis, and the full set of modal accessibility requirements per WCAG (focus trap, `aria-labelledby`, `aria-describedby`, escape key handling).""",
-
-"""**Task (Code Generation):**
-Build a `contractTest` utility for API contract testing between a React app and its backend:
-
-```ts
-// Client declares what it expects:
-contractTest('GET /api/user/:id', {
-  request: { params: { id: '123' } },
-  response: {
-    status: 200,
-    body: z.object({
-      id: z.string(),
-      name: z.string(),
-      email: z.string().email(),
-    }),
-  },
-});
-
-// Runs against real API in CI and generates a pact file for backend validation
-```
-
-Show: Zod schema validation of real API responses, Pact library integration for consumer-driven contract testing, and the CI workflow that breaks the build if the API violates the contract.""",
-
-"""**Debug Scenario:**
-A Playwright test that navigates between two pages occasionally fails with "Context was destroyed, most likely trying to navigate while an older test is still loading":
-
-```ts
-test('navigates to profile', async ({ page }) => {
-  await page.goto('/dashboard');
-  await page.click('[data-testid="profile-link"]');
-  await expect(page).toHaveURL('/profile');
-});
-```
-
-The test suite runs tests in parallel — another test navigates the same page. Show: proper page isolation (each test should use a fresh `page` fixture), the `browser.newPage()` pattern for parallel isolation, configuring `workers: 1` for sequential (safe but slow), and `test.describe.serial` for sequencing related tests without disabling parallelism globally.""",
-
-"""**Task (Code Generation):**
-Implement a `testPerformance` utility that asserts React component render count:
-
-```ts
-const counter = renderWithRenderCounter(<ProductList products={mockProducts} />);
-
-// Simulate filtering:
-await userEvent.type(screen.getByRole('searchbox'), 'laptop');
-
-expect(counter.renderCount).toBeLessThan(5); // should not over-render
-expect(counter.lastRenderDuration).toBeLessThan(16); // under 1 frame
-```
-
-Show: using React's `Profiler` component to count renders and measure duration, a custom `renderWithRenderCounter` that wraps RTL's `render` with profiling, and why `React.StrictMode` doubles render counts (and how to account for it in assertions).""",
-
-"""**Debug Scenario:**
-A component test is asserting on text content, but the assertion keeps failing due to whitespace differences between the rendered HTML and the expected string:
-
-```ts
-expect(screen.getByRole('heading')).toHaveTextContent('Total: $1,234.56');
-// Element text: 'Total:  $1,234.56' (double space from CSS layout)
-```
-
-`toHaveTextContent` uses `textContent` which includes all whitespace. Show: the `normalizeWhitespace: true` option in `toHaveTextContent`, using `getByRole` with `name` option which normalizes whitespace for ARIA accessible name computation, and the difference between `textContent`, `innerText`, and `innerHTML` for testing text assertions.""",
-
-"""**Task (Code Generation):**
-Build a visual regression testing system using Playwright screenshots with pixel-diff:
-
-```ts
-test('renders dashboard correctly', async ({ page }) => {
-  await page.goto('/dashboard?seed=123'); // deterministic data
-  await page.waitForLoadState('networkidle');
+describe('Countdown', () => {
+  beforeEach(() => vi.useFakeTimers());
+  // Missing: afterEach(() => vi.useRealTimers());
   
-  // Mask dynamic elements:
-  await expect(page).toHaveScreenshot('dashboard.png', {
-    mask: [page.locator('.current-time'), page.locator('.live-chart')],
-    threshold: 0.01, // 1% pixel difference threshold
-    animations: 'disabled',
+  test('counts down', () => {
+    vi.advanceTimersByTime(5000);
+    // ...
+  });
+});
+
+describe('AsyncOp', () => {
+  test('resolves after delay', async () => {
+    await someAsyncOp(); // hangs forever (awaiting real time, but timers are fake)
   });
 });
 ```
 
-Show: the Playwright screenshot comparison setup, CI vs local baseline management (baselines committed to git), a GitHub Actions workflow that uploads diff images as artifacts on failure, and handling dynamic content (dates, random data) with fixed seeds or masking.""",
-
-"""**Debug Scenario:**
-A test for a `useLocalStorage` hook fails in Jest because `localStorage` is not available:
-
-```ts
-test('persists to localStorage', () => {
-  const { result } = renderHook(() => useLocalStorage('key', 'default'));
-  act(() => result.current[1]('new-value'));
-  expect(result.current[0]).toBe('new-value');
-  expect(localStorage.getItem('key')).toBe('"new-value"'); // localStorage is not defined
-});
-```
-
-Jest's default JSDOM environment does include `localStorage`, but the test environment is set to `node` in `jest.config.ts`. Show: setting `testEnvironment: 'jsdom'` globally, using `@jest-environment jsdom` docblock per file, mocking localStorage with `jest.spyOn(Storage.prototype, 'getItem')`, and the `localStorage` mock object pattern for full control.""",
+Show: always pairing `vi.useFakeTimers()` with `vi.useRealTimers()` in `afterEach`, `vi.clearAllTimers()` + `vi.useRealTimers()` for complete cleanup, the `vi.useFakeTimers({ toFake: ['setTimeout', 'setInterval'] })` selective faking to avoid affecting Promise resolution, and configuring a global `afterEach` in `vitest.setup.ts` to auto-restore all mocks.""",
 
 """**Task (Code Generation):**
-Implement a `testDataBuilder` for domain-driven test data that reads naturally:
+Build a `diffSnapshot` testing utility that shows human-readable diffs for complex data structures:
 
 ```ts
-const order = aBuilder()
-  .anOrder()
-    .withStatus('pending')
-    .withItems([
-      anItem().withName('Laptop').withPrice(999).build(),
-      anItem().withName('Mouse').withPrice(29).build(),
-    ])
-    .withCustomer(aCustomer().withEmail('alice@example.com').build())
-  .build();
+const previous = { users: [{ id: 1, name: 'Alice' }, { id: 2, name: 'Bob' }] };
+const current  = { users: [{ id: 1, name: 'Alice B.' }, { id: 3, name: 'Charlie' }] };
+
+expect(current).toDiffMatchSnapshot(previous, {
+  idKey: 'id',
+  showAdded: true,
+  showRemoved: true,
+  showModified: true,
+});
+
+// Diff output:
+// ~ Modified: users[id=1].name: "Alice" → "Alice B."
+// + Added: users[id=3] = { id: 3, name: 'Charlie' }
+// - Removed: users[id=2] = { id: 2, name: 'Bob' }
 ```
 
-Show: the fluent builder TypeScript implementation, how builders compose (order contains items and customer), the `build()` method that validates required fields, and integration with Zod schemas for runtime validation of built objects.""",
+Show: the `jest.extend` custom matcher, the recursive diff algorithm by ID key, and the human-readable formatter for each change type.""",
 
 """**Debug Scenario:**
-A React context test fails because the component under test reads from a context but the test doesn't provide it, causing the component to use the context's default value instead of the mocked value:
+A Playwright test that uses `page.evaluate()` to call a function defined in the test file fails:
 
 ```ts
-// UserContext default: { user: null }
-test('shows user name', () => {
-  render(<UserHeader />);
-  expect(screen.getByText('Alice')).toBeInTheDocument(); // fails: uses default null
-});
+const result = await page.evaluate((fn) => fn(42), myCalculationFn);
+// Error: fn is not a function
 ```
 
-The test is missing the Provider. Show: wrapping with the Provider in `render(<UserContext.Provider value={{ user: mockUser }}><UserHeader /></UserContext.Provider>)`, extracting this to a `renderWithContext` utility, and using RTL's `wrapper` option in `renderHook` for context-dependent hooks.""",
+`page.evaluate()` serializes its argument using JSON — functions can't be serialized. Even passing a function reference results in `null` on the page side.
+
+Show: serializing the function as a string and using `page.evaluate(new Function('return ' + fn.toString())()(42))`, the `page.exposeFunction('calculateFn', myCalculationFn)` API for exposing Node.js functions to the page, and when to use `page.evaluate` (simple JS) vs `page.exposeFunction` (calling Node.js-side functions from page context).""",
 
 """**Task (Code Generation):**
-Build a `waitForAnimations` testing utility for Framer Motion components:
+Implement a `generateVisualTestReport` that produces an HTML report of component screenshots:
 
 ```ts
-const { getByTestId } = render(<AnimatedModal isOpen={true} />);
-await waitForAnimations(); // waits for all Framer Motion animations to complete
-
-expect(getByTestId('modal')).toHaveStyle({ opacity: '1', transform: 'scale(1)' });
-```
-
-Show: mocking Framer Motion's `animate` with `jest.mock('framer-motion')` to skip animations in tests, using `MotionConfig` with `reducedMotion="always"` in the test wrapper to disable animations, and the `act` + `jest.runAllTimers()` pattern for animation-complete assertions. Discuss tradeoffs between each approach.""",
-
-"""**Debug Scenario:**
-A Storybook interaction test using `play` function fails with a timeout when clicking a button that triggers an async action:
-
-```ts
-export const Default: Story = {
-  play: async ({ canvasElement }) => {
-    const canvas = within(canvasElement);
-    await userEvent.click(canvas.getByRole('button', { name: 'Save' }));
-    await expect(canvas.getByText('Saved!')).toBeInTheDocument(); // timeout
+await generateVisualTestReport({
+  components: [
+    { name: 'Button', variants: ['primary', 'secondary', 'ghost'] },
+    { name: 'Card', variants: ['basic', 'with-image', 'with-badge'] },
+  ],
+  renderComponent: async (name, variant) => {
+    // Renders the component in a test context and returns a screenshot buffer
   },
+  outputPath: './test-reports/visual',
+  compareWith: './baseline-screenshots',
+  diffThreshold: 0.01, // 1% pixel difference
+});
+```
+
+Show: PNG screenshot capture using Playwright's `screenshot()` API, pixel-level diff using `pixelmatch`, the HTML report template that shows baseline/current/diff side-by-side, and the CI step that fails if any component's diff exceeds the threshold.""",
+
+"""**Debug Scenario:**
+A TypeScript test file imports a module and the test passes, but the TypeScript compiler shows an error:
+
+```ts
+import { formatCurrency } from '../utils/format';
+// Error: Cannot find module '../utils/format' or its corresponding type declarations
+```
+
+The module exists and exports correctly. But the test file is in `__tests__/` which uses a different `tsconfig.json` (`tsconfig.test.json`) that doesn't include `../utils` in its `paths` or `rootDir`.
+
+Show: configuring `tsconfig.test.json` to extend the base `tsconfig.json` (`"extends": "../tsconfig.json"`) and override only test-specific settings, ensuring `include` paths cover both source and test files, and the Vitest `resolve.alias` setting that should mirror `tsconfig.json` paths.""",
+
+"""**Task (Code Generation):**
+Build a `useTestHarness` utility for testing React hooks with complex provider dependencies:
+
+```ts
+const harness = createTestHarness({
+  providers: [
+    { provider: QueryClientProvider, props: { client: testQueryClient } },
+    { provider: AuthProvider, props: { user: mockUser } },
+    { provider: ThemeProvider, props: { theme: 'light' } },
+  ],
+});
+
+// In test:
+const { result } = harness.renderHook(() => useUserDashboard());
+const { result: r2 } = harness.renderHook(() => useUserDashboard(), {
+  overrides: [{ provider: AuthProvider, props: { user: mockAdmin } }], // override for this test
+});
+```
+
+Show: the harness that wraps hooks with providers, the override mechanism that replaces specific providers for individual tests, and cleanup between tests (reset QueryClient, reset AuthProvider state).""",
+
+"""**Debug Scenario:**
+A React component test checks that an error boundary catches a rendering error from a child component. The test passes locally but fails in CI with:
+
+```
+Error: Uncaught [TypeError: Cannot read property 'name' of undefined]
+```
+
+The error IS caught by the error boundary — but `console.error` is called by React during error boundary activation, and CI is configured with `--ci` mode which treats any `console.error` output as a test failure.
+
+Show: suppressing the expected `console.error` with `jest.spyOn(console, 'error').mockImplementation(() => {})` scoped to just this test, using `expect(console.error).toHaveBeenCalledWith(expect.stringContaining('an error'))` to assert the error was logged as expected, and restoring the spy in `afterEach`.""",
+
+"""**Task (Code Generation):**
+Implement a `testCoverageGate` script that enforces minimum coverage per file type:
+
+```ts
+const gate = {
+  'src/utils/**/*.ts':      { lines: 90, branches: 85 },
+  'src/components/**/*.tsx': { lines: 80, branches: 70 },
+  'src/api/**/*.ts':         { lines: 95, branches: 90 },
+  'src/pages/**/*.tsx':      { lines: 60, branches: 50 },
 };
+
+// Fails CI if any file group is below threshold
 ```
 
-The `getByText` assertion doesn't wait for the 'Saved!' text to appear. Show: using `findByText` (async query with built-in polling), `waitFor` from `@storybook/test`, and configuring the `play` function's timeout via `parameters.chromatic.delay`. Also show how to mock API calls in Storybook using MSW's `mswLoader`.""",
+Show: parsing Istanbul's `coverage-summary.json`, grouping files by glob pattern using `micromatch`, computing the mean coverage per group, and a GitHub Actions workflow step that runs the gate and annotates PR with which files are below threshold using the GitHub API.""",
 
-"""**Task (Code Generation):**
-Implement property-based testing for a data validation utility using `fast-check`:
+"""**Debug Scenario:**
+A jest test mocks a module but the mock isn't applied to an ES Module import that uses named exports:
 
 ```ts
-import fc from 'fast-check';
+jest.mock('../api', () => ({
+  fetchUser: jest.fn().mockResolvedValue(mockUser),
+}));
 
-test('parseCurrency always returns a number or throws', () => {
-  fc.assert(fc.property(
-    fc.string(),
-    (input) => {
-      try {
-        const result = parseCurrency(input);
-        expect(typeof result).toBe('number');
-        expect(Number.isFinite(result)).toBe(true);
-      } catch (e) {
-        expect(e).toBeInstanceOf(CurrencyParseError);
-      }
-    }
-  ));
+import { fetchUser } from '../api'; // comes from mock? No — still original!
+```
+
+In Jest with ESM mode (`"type": "module"` in `package.json`), `jest.mock()` calls must be hoisted above imports — but with static `import` statements, hoisting can't happen the same way as with `require`.
+
+Show: using `jest.unstable_mockModule()` for ESM mocking, dynamic `import()` in the test to get the mocked version, and configuring Jest's `transform` with Babel (`@babel/preset-env` with `modules: 'commonjs'`) to transform ESM to CJS for easier mocking.""",
+
+"""**Task (Code Generation):**
+Build a `simulateNetworkConditions` helper for RTL tests that simulates different network speeds:
+
+```ts
+const { setLatency, setErrorRate, setOffline } = simulateNetworkConditions();
+
+test('shows loading skeleton during slow network', async () => {
+  setLatency({ min: 2000, max: 3000 }); // slow 3G simulation
+  render(<FeedPage />);
+  
+  expect(screen.getByTestId('feed-skeleton')).toBeInTheDocument();
+  await screen.findByTestId('feed-content', {}, { timeout: 5000 });
+});
+
+test('shows error state when offline', async () => {
+  setOffline(true);
+  render(<FeedPage />);
+  expect(await screen.findByText('No internet connection')).toBeInTheDocument();
 });
 ```
 
-Show: `fc.string()`, `fc.float()`, `fc.integer()` generators, custom arbitraries for domain types (e.g., `fc.emailAddress()`), shrinking examples on failure, and applying property-based testing to a React reducer (properties: state is always valid, actions are idempotent).""",
+Show: intercepting `fetch`/`XMLHttpRequest` with a latency wrapper, MSW handler modification for error rate, and `navigator.onLine` mock for offline simulation.""",
 
 """**Debug Scenario:**
-A React Testing Library test clicks a button that opens a dialog, then checks for dialog content. The test fails with "Unable to find role=dialog":
+A React component that renders a `<canvas>` element has no test coverage because JSDOM doesn't implement the Canvas API:
 
 ```ts
-await userEvent.click(screen.getByRole('button', { name: 'Open Settings' }));
-expect(screen.getByRole('dialog')).toBeInTheDocument();
+render(<ChartComponent data={mockData} />);
+// Error: getContext is not a function
 ```
 
-The dialog renders in a React Portal, outside the `render()` container. RTL's `screen.getByRole` queries the entire document body (including portals) by default — so portals should be findable. The real issue is that the dialog has `role="presentation"` instead of `role="dialog"`.
-
-Show: debugging element roles using `screen.debug()`, `aria-query` library for ARIA role lookup, and the accessible markup that makes a dialog findable with `getByRole('dialog')` (requires `role="dialog"` + `aria-labelledby` or `aria-label`).""",
+`HTMLCanvasElement.getContext` is not implemented in JSDOM. Show: mocking `CanvasRenderingContext2D` globally in `jest.setup.ts` with a mock that records all drawing calls (`fillRect`, `drawText`, etc.), using `canvas-mock` npm package, and an alternative test strategy — testing the data transformation logic (input → chart data model) separately from the rendering logic (chart data model → canvas draw calls), testing only what's testable.""",
 
 """**Task (Code Generation):**
-Build a mutation testing workflow to measure test suite quality:
-
-```bash
-# Runs Stryker on the utils/ directory:
-npx stryker run --mutate "src/utils/**/*.ts" --testRunner jest
-```
-
-Show: configuring `stryker.config.mjs` for a React/TypeScript project, understanding mutation score (percentage of mutants killed by tests), adding targeted tests for surviving mutants (boundary conditions, null checks), and integrating the mutation score threshold into CI (`--minMutationScore 80`).""",
-
-"""**Debug Scenario:**
-A test suite has 500 tests and takes 8 minutes to run in CI. `jest --watch` is fast locally, but full CI runs are slow. Analysis shows 80% of the time is spent in 20 integration tests that make real database queries.
-
-Show: separating unit and integration tests with Jest projects config (`testPathPattern` per project), running unit tests on every commit and integration tests nightly or on `main`, using `--shard=1/4` for parallel sharding across 4 CI machines, and `--bail` to fail fast on first test failure in PR checks.""",
-
-"""**Task (Code Generation):**
-Implement a `recordNetworkRequests` test utility for asserting API call sequences:
+Implement a `crossBrowserTestMatrix` for running the same Playwright spec across multiple browser + device combinations:
 
 ```ts
-const recorder = recordNetworkRequests([
-  { url: '/api/users', method: 'GET', response: mockUsers },
-  { url: '/api/users/1', method: 'PATCH', response: updatedUser },
-]);
-
-// Interact with component:
-await userEvent.click(screen.getByRole('button', { name: 'Update User' }));
-
-// Assert request sequence:
-recorder.assertCalled('GET /api/users');
-recorder.assertCalledWith('PATCH /api/users/1', { body: { name: 'New Name' } });
-recorder.assertCallCount('GET /api/users', 1); // called exactly once
-recorder.assertNotCalled('DELETE /api/users/1');
-```
-
-Show: MSW handler setup, request capture, and the assertion API.""",
-
-"""**Debug Scenario:**
-A component test for a rich text editor fails because `contenteditable` elements don't support `userEvent.type`:
-
-```ts
-const editor = screen.getByRole('textbox'); // contenteditable div
-await userEvent.type(editor, 'Hello world');
-expect(editor).toHaveTextContent('Hello world'); // fails: no text added
-```
-
-`userEvent.type` dispatches keyboard events but `contenteditable` elements rely on `beforeinput` and `input` events with `InputEvent.data` for text insertion, not `keypress` alone. Show: using `userEvent.setup()` with clipboard option for paste-based input, directly setting `innerHTML` + firing `input` event for unit tests, and Playwright (which handles `contenteditable` correctly) for E2E tests.""",
-
-"""**Task (Code Generation):**
-Build a `testCoverage` badge generator that creates an SVG coverage badge from Istanbul's output:
-
-```ts
-// Runs after jest --coverage:
-const { statements, branches, functions, lines } = parseCoverageReport('./coverage/coverage-summary.json');
-
-generateBadge({
-  label: 'coverage',
-  message: `${lines.pct}%`,
-  color: lines.pct >= 80 ? 'brightgreen' : lines.pct >= 60 ? 'yellow' : 'red',
-  outputPath: './coverage/badge.svg',
+// playwright.config.ts:
+export default defineConfig({
+  projects: generateTestMatrix([
+    { browsers: ['chromium', 'firefox', 'webkit'] },
+    { devices: ['iPhone 13', 'Pixel 5', 'iPad Pro'] },
+    { viewports: [{ width: 320 }, { width: 768 }, { width: 1440 }] },
+  ]),
 });
 ```
 
-Show: parsing `coverage-summary.json`, the SVG badge template with `foreignObject` for text, the color thresholds, writing to file, and integrating into CI to update the badge in the README via the GitHub API.""",
+Show: the `generateTestMatrix` function that creates `playwright.devices`-based project configs, grouping tests by tag (`@visual`, `@functional`, `@mobile`) to run subsets per CI stage (mobile tests on mobile devices only), and setting different timeouts per browser (`webkit` typically slower).""",
 
 """**Debug Scenario:**
-A Next.js API Route test using `node-mocks-http` fails because the mock response doesn't support streaming:
+A test for a custom `useDebounce` hook passes when run individually but fails in a suite run:
 
 ```ts
-const { req, res } = createMocks({ method: 'GET' });
-await GET(req as NextRequest); // Returns ReadableStream
-res._getJSONData(); // Error: response was streamed, cannot get JSON
+test('debounces updates', async () => {
+  const { result } = renderHook(() => useDebounce('initial', 500));
+  act(() => { result.current[1]('updated'); });
+  act(() => { vi.advanceTimersByTime(500); });
+  expect(result.current[0]).toBe('updated');
+});
 ```
 
-Modern Next.js App Router Route Handlers return `Response` objects with streaming support, not classic `res.json()`. Show: using `fetch()` with `unstable_httpHandler` (Next.js testing), the `Response` mock that captures streamed body, and using `supertest` with a running Next.js dev server for integration testing Route Handlers.""",
+When run in a full suite, another test uses `vi.useFakeTimers()` without restoring real timers — the debounce test then runs with fake timers but doesn't advance them (it calls `advanceTimersByTime` without first enabling fake timers via `vi.useFakeTimers()` itself).
+
+Show: the correct isolation pattern — always call `vi.useFakeTimers()` in your own `beforeEach` (don't rely on other tests' setup), pairing with `vi.useRealTimers()` in `afterEach`, and the `setupFiles` global configuration for fake timers.""",
+
+"""**Task (Code Generation):**
+Build a `testComponentLifecycle` utility that verifies mount, update, and unmount behavior:
+
+```ts
+testComponentLifecycle(MyComponent, {
+  onMount: {
+    props: { userId: '1' },
+    expect: async (utils) => {
+      await expect(screen.findByText('Alice')).resolves.toBeInTheDocument();
+    },
+  },
+  onUpdate: {
+    newProps: { userId: '2' },
+    expect: async (utils) => {
+      await expect(screen.findByText('Bob')).resolves.toBeInTheDocument();
+    },
+  },
+  onUnmount: {
+    expect: () => {
+      expect(mockApiClient.cancelAllRequests).toHaveBeenCalled();
+    },
+  },
+});
+```
+
+Show: RTL's `rerender` for the update phase, `unmount` for cleanup testing, and TypeScript generics for the props type.""",
+
+"""**Debug Scenario:**
+A test that uses React Testing Library's `screen.getByRole('combobox')` doesn't find the custom `<AutocompleteInput>` component:
+
+```ts
+render(<AutocompleteInput placeholder="Search..." />);
+screen.getByRole('combobox'); // Not found!
+```
+
+The `AutocompleteInput` renders:
+```html
+<div class="autocomplete-wrapper">
+  <input type="text" placeholder="Search..." />
+  <div class="dropdown" role="listbox">...</div>
+</div>
+```
+
+The `<input>` has `role="textbox"` implicitly (not `combobox`). For ARIA `combobox`, the input needs `role="combobox"` explicitly, `aria-haspopup="listbox"`, `aria-expanded`, and `aria-controls` pointing to the listbox.
+
+Show: the correct ARIA implementation for a combobox, using `getByRole('combobox')` once the ARIA is correct, and why RTL's role-based queries enforce accessible markup (they fail if the ARIA isn't correct).""",
+
+"""**Task (Code Generation):**
+Implement a `generateAPITests` factory that produces a comprehensive test suite from an OpenAPI schema:
+
+```ts
+const suite = generateAPITests({
+  schema: './openapi.yaml',
+  baseUrl: 'http://localhost:3000',
+  auth: { type: 'bearer', token: process.env.TEST_TOKEN },
+  customValidators: {
+    '/api/users': (response) => expect(response.body).toMatchSchema(UserArraySchema),
+  },
+});
+
+// Auto-generates:
+// - Request validation tests (missing required fields → 400)
+// - Response schema contract tests
+// - Authentication tests (missing token → 401)
+// - Rate limiting tests
+```
+
+Show: parsing the OpenAPI schema with `swagger-parser`, generating test cases from endpoint definitions, using `supertest` for HTTP requests, and Zod schema generation from OpenAPI schemas.""",
+
+"""**Debug Scenario:**
+A team writes E2E tests that depend on test data created in CI. Tests pass in isolation but fail when run in parallel (8 workers):
+
+```ts
+test('admin can delete user', async ({ page }) => {
+  // Creates user named 'TestUser_to_delete'
+  await page.goto('/admin/users');
+  await page.click('[data-user-name="TestUser_to_delete"]'); // Another worker deleted it first!
+});
+```
+
+Two workers create and then try to delete the same named user. Show: using unique identifiers per worker (`const uniqueName = \`TestUser_${test.info().workerIndex}_${Date.now()}\``), worker-scoped data fixtures that each worker creates for itself, isolated test database schemas per worker (Prisma's `--schema` flag), and Playwright's `test.extend` for worker-scoped fixtures.""",
+
+"""**Task (Code Generation):**
+Build a `visualDiffReporter` that generates a structured report comparing screenshots across releases:
+
+```ts
+const reporter = new VisualDiffReporter({
+  baselineDir: './screenshots/v2.0.0',
+  currentDir:  './screenshots/v2.1.0',
+  reportDir:   './visual-diff-report',
+  threshold:   0.02, // 2% pixel difference tolerance
+});
+
+const report = await reporter.compare();
+// report.passed: 143, report.failed: 7, report.added: 2, report.removed: 1
+await reporter.generateHTML(report); // opens in browser with side-by-side view
+```
+
+Show: recursive directory comparison, `pixelmatch` for pixel-level diff, generating an HTML report with CSS Grid side-by-side layout, the diff image overlay (highlighted changed pixels), and a GitHub Actions step that uploads the report as an artifact and posts a PR comment with the summary.""",
+
+"""**Task (Code Generation):**
+Implement a `contractTestSuite` for validating API consumer-producer compatibility:
+
+```ts
+const suite = contractTestSuite({
+  consumer: 'frontend-app',
+  provider: 'user-service',
+  interactions: [
+    {
+      description: 'get user by ID',
+      request: { method: 'GET', path: '/users/1' },
+      response: {
+        status: 200,
+        body: {
+          id: like(1),          // matches any number
+          name: like('Alice'),  // matches any string
+          email: email(),       // must be a valid email format
+          role: eachLike('admin'), // array with at least one 'admin'-like element
+        },
+      },
+    },
+  ],
+});
+
+// Consumer test: stubs provider response, tests consumer behavior
+await suite.runConsumerTest(async (mockProvider) => {
+  const user = await fetchUser(mockProvider.url, '1');
+  expect(user.name).toBeDefined();
+});
+```
+
+Show: the `like`, `email`, `eachLike` matchers that validate shape not exact values, saving the contract to a Pact JSON file, and the provider verification that replays contract interactions against the real provider.""",
 
 ]

@@ -1,382 +1,424 @@
 """
-snippets/q_css.py — BATCH 3: 28 brand-new CSS/Styling questions
-Zero overlap with batch1 or batch2 archives.
+snippets/q_css.py — BATCH 4: 28 brand-new CSS/Styling questions
+Zero overlap with batch1, batch2, or batch3 archives.
 """
 
 Q_CSS = [
 
 """**Task (Code Generation):**
-Implement a pure CSS animated gradient border that works without JavaScript:
-
-```css
-.gradient-border {
-  --gradient: linear-gradient(90deg, #6366f1, #8b5cf6, #ec4899, #6366f1);
-  background-size: 200% auto;
-  animation: borderSpin 3s linear infinite;
-}
-```
-
-Show: using `background-clip: padding-box` and `border: 2px solid transparent` to create a transparent border that reveals an animated gradient background layer, the `::before` pseudo-element technique as an alternative, `@property` for animating gradient positions in Chrome, and accessibility considerations for users with `prefers-reduced-motion`.""",
-
-"""**Debug Scenario:**
-A Next.js app with CSS Modules generates class names like `_heading_1a2b3c` in development but `_1a2b3c` in production (the class name is truncated). Some CSS specificity conflicts arise because two unrelated components generate the same truncated hash.
-
-Show: configuring `localIdentName` in the CSS Modules Webpack config to include `[name]` in production builds, the Next.js `experimental.cssModulesClassNamePrefix` option, and how to audit for CSS class name collisions using PostCSS plugins. Explain the tradeoff between shorter class names (smaller CSS bundle) and collision risk.""",
-
-"""**Task (Code Generation):**
-Build a container-aware responsive layout system using CSS Container Queries:
-
-```css
-.card-grid {
-  container-type: inline-size;
-  container-name: card-grid;
-}
-
-@container card-grid (min-width: 600px) {
-  .card { display: flex; }
-}
-
-@container card-grid (min-width: 900px) {
-  .card { grid-template-columns: 2fr 1fr; }
-}
-```
-
-Show: the difference between `container-type: inline-size` vs `size`, `container-name` for nesting multiple containers, `@container style()` queries for styling based on custom properties, browser support detection with `@supports (container-type: inline-size)`, and a JavaScript polyfill setup for older browsers.""",
-
-"""**Debug Scenario:**
-A dashboard component uses CSS Grid with `auto-rows: minmax(200px, auto)`. On Firefox, rows expand beyond 200px as expected when content overflows. On Chrome, rows are exactly 200px and content overflows out of the grid cell.
-
-Investigation reveals Chrome interprets `minmax(200px, auto)` differently for items with `overflow: hidden`. Show the exact CSS behavior difference, the fix (`min-height: 0` on the grid item), and how `grid-template-rows: masonry` (experimental) interacts with `minmax`.""",
-
-"""**Task (Code Generation):**
-Implement a fully keyboard-navigable CSS-only dropdown navigation menu:
+Implement a CSS-only accessible tooltip using the `popover` API (no JavaScript):
 
 ```html
-<nav>
-  <ul>
-    <li>
-      <a href="/products">Products</a>
-      <ul class="dropdown">
-        <li><a href="/products/web">Web Apps</a></li>
-        <li><a href="/products/mobile">Mobile</a></li>
-      </ul>
+<button popovertarget="my-tooltip" popovertargetaction="show">Hover for info</button>
+<div id="my-tooltip" popover>This is the tooltip content</div>
+```
+
+Show: the Popover API's `popover` attribute (auto/manual), `popovertarget` binding, CSS `:popover-open` pseudo-class for styling the open state, `::backdrop` for manual popovers, anchoring the tooltip relative to the trigger using CSS `anchor-name` and `anchor()` (experimental), and `@supports (anchor-name: --foo)` fallback to traditional CSS positioning.""",
+
+"""**Debug Scenario:**
+A component library uses `:focus` styles for keyboard navigation but users report seeing focus rings on mouse clicks. Non-keyboard users find the focus rings distracting.
+
+```css
+button:focus { outline: 3px solid blue; } /* shows on mouse click too */
+```
+
+Show: replacing `:focus` with `:focus-visible` (only shows focus ring for keyboard navigation, not mouse/touch), the browser heuristic for when `:focus-visible` applies (keyboard events, programmatic focus on text inputs), the `focus-visible` polyfill for older browsers, and why removing focus styles entirely (`:focus { outline: none }`) is an accessibility violation under WCAG 2.1 AA.""",
+
+"""**Task (Code Generation):**
+Build a CSS design token system using CSS Houdini's `@property` for animatable custom properties:
+
+```css
+@property --brand-hue {
+  syntax: '<number>';
+  inherits: false;
+  initial-value: 265;
+}
+
+@property --progress {
+  syntax: '<percentage>';
+  inherits: false;
+  initial-value: 0%;
+}
+
+/* Now can animate: */
+.button { transition: --brand-hue 0.3s ease; }
+.button:hover { --brand-hue: 280; }
+```
+
+Show: `@property` for numeric, color, percentage, and length types, how registered properties enable animated custom properties (unregistered custom properties can't be animated), the `animation` shorthand on a registered property, and browser support with `@supports (syntax: '<color>')`.""",
+
+"""**Debug Scenario:**
+A `<Modal>` component positioned with `position: fixed` is clipped by a parent element with `transform: translateX(0)`, meaning it doesn't overlay the full screen:
+
+```css
+.sidebar { transform: translateX(0); /* or any transform */ }
+.sidebar .modal { position: fixed; /* clipped to sidebar! */ }
+```
+
+`position: fixed` normally positions relative to the viewport. But if any ancestor has `transform`, `perspective`, `filter`, or `will-change: transform`, it creates a new containing block — `position: fixed` becomes relative to that element.
+
+Show: the solution of rendering the modal in a `<Portal>` (via `createPortal`) into `document.body`, why this escapes the transformed ancestor, and the same issue with `position: sticky` (also affected by transformed ancestors).""",
+
+"""**Task (Code Generation):**
+Implement a fluid typography system using CSS `clamp()` and viewport units:
+
+```css
+:root {
+  /* Fluid: scales from 16px @ 320px viewport to 20px @ 1440px viewport */
+  --font-body: clamp(1rem, calc(0.9rem + 0.5vw), 1.25rem);
+  
+  /* Heading scales from 32px to 72px */
+  --font-h1: clamp(2rem, calc(1.5rem + 2.5vw), 4.5rem);
+}
+```
+
+Show: the `clamp(min, preferred, max)` formula derivation (preferred = `m*vw + b` where m calculates slope and b calculates intercept), a Sass mixin that generates the clamp from `minSize`, `maxSize`, `minWidth`, `maxWidth` parameters, the accessibility consideration that users who zoom can override viewport-based `vw` units (use `rem` as the base), and the `font-size-adjust` property for cross-font comparisons.""",
+
+"""**Debug Scenario:**
+A CSS Grid layout with `grid-template-columns: 1fr 1fr 1fr` renders three equal columns. After adding a 4th item, it wraps below but takes up the full width (stretching to fill the 3-column row). The developer wants the 4th item to be 1/3 width:
+
+```css
+.grid { display: grid; grid-template-columns: 1fr 1fr 1fr; }
+/* Item 4 wraps and stretches to full width of the implicit row */
+```
+
+Implicit rows still use `1fr` per column — so item 4 sitting alone in the 3rd implicit row stretches to fill 3/3 of available space (since there's no sibling in the row to share it). Show: using `justify-items: start` to prevent stretching, using `grid-auto-columns` to set the width of implicit columns, and the `grid-template: repeat(...)` explicit placement alternative.""",
+
+"""**Task (Code Generation):**
+Build a responsive sidebar layout that transitions between overlay (mobile) and fixed (desktop) modes using CSS only:
+
+```css
+/* Mobile: sidebar overlays content */
+@media (max-width: 768px) {
+  .sidebar {
+    position: fixed;
+    transform: translateX(-100%); /* hidden off-screen */
+    transition: transform 0.3s ease;
+  }
+  .sidebar.open { transform: translateX(0); }
+  .backdrop { display: block; } /* clicking closes sidebar */
+}
+
+/* Desktop: sidebar is always visible, content flows beside it */
+@media (min-width: 769px) {
+  .layout { display: grid; grid-template-columns: 280px 1fr; }
+}
+```
+
+Show: the complete layout CSS, the CSS `:has()` technique to toggle `open` class without JavaScript (`nav:has(:checked) .sidebar { transform: translateX(0) }`), the backdrop overlay, and smooth focus management when opening/closing.""",
+
+"""**Debug Scenario:**
+A developer applies `animation-fill-mode: forwards` to keep the end state of an animation:
+
+```css
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+.element { animation: fadeIn 0.5s ease forwards; }
+```
+
+The element stays visible after the animation. But later, trying to apply `opacity: 0` with inline style doesn't hide it — the animation value overrides the inline style.
+
+CSS animations have higher cascade precedence than styles without `!important`. Show: removing `animation-fill-mode: forwards` and instead setting the initial opacity via class toggle (no animation override issue), using `animation-fill-mode: none` and then adding a CSS class to maintain the end state, and the `style.animation = ''` JavaScript reset to release the animation.""",
+
+"""**Task (Code Generation):**
+Implement a CSS custom property-based theming system with runtime theme generation from a brand color:
+
+```ts
+// Given a single brand hex color, generate a full theme:
+function applyBrandTheme(brandColor: string) {
+  const hsl = hexToHsl(brandColor);
+  document.documentElement.style.setProperty('--brand-h', String(hsl.h));
+  document.documentElement.style.setProperty('--brand-s', `${hsl.s}%`);
+  document.documentElement.style.setProperty('--brand-l', `${hsl.l}%`);
+}
+```
+
+Show: the CSS custom property architecture where all semantic tokens derive from `--brand-h`, `--brand-s`, `--brand-l`:
+- `--color-primary: hsl(var(--brand-h) var(--brand-s) var(--brand-l))`
+- `--color-primary-light: hsl(var(--brand-h) var(--brand-s) calc(var(--brand-l) + 20%))`
+- `--color-on-primary: hsl(var(--brand-h) 10% 98%)` (for text on primary background)
+
+And the contrast ratio check to ensure WCAG AA compliance.""",
+
+"""**Debug Scenario:**
+A developer uses `word-break: break-all` to prevent text overflow in a card component. All text wraps correctly, but URLs in the text wrap in strange places:
+
+```
+https://www.example.com/
+very-long-path/that/sho
+uld-wrap-nicely
+```
+
+`break-all` breaks at any character position. `overflow-wrap: break-word` is more appropriate — it only breaks words that would overflow (leaves normal word boundaries intact). Show: `overflow-wrap: break-word` (old: `word-wrap: break-word`), the difference from `word-break: break-word` (non-standard, same as break-all in most browsers), `hyphens: auto` for grammatically correct line breaks with soft hyphens, and the combination that handles both long URLs and text gracefully.""",
+
+"""**Task (Code Generation):**
+Build an accessible color contrast checker component:
+
+```tsx
+<ContrastChecker
+  foreground="#ffffff"
+  background="#6366f1"
+  sizes={['normal', 'large', 'ui']}
+/>
+// Output:
+// Contrast ratio: 4.54:1
+// Normal text (4.5:1): ✓ AA | ✗ AAA
+// Large text (3:1):  ✓ AA | ✓ AAA
+// UI components (3:1): ✓ AA
+```
+
+Show: the WCAG relative luminance formula (linearize sRGB, weight by perception: R×0.2126, G×0.7152, B×0.0722), the contrast ratio formula `(L1 + 0.05) / (L2 + 0.05)`, WCAG AA vs AAA thresholds, and a color picker that suggests darker/lighter variants to achieve the required contrast ratio.""",
+
+"""**Debug Scenario:**
+A CSS grid item uses `place-self: center` to center itself within its grid cell. On Firefox, it appears centered. On Chrome, it's stretched to fill the cell.
+
+Investigation reveals the grid item is a `<div>` with `display: flex`. When a flex container is a grid item, `align-self: stretch` (the default) overrides `place-self: center` in Chrome's older rendering engine.
+
+Show: explicitly setting `align-self: center` and `justify-self: center` separately (instead of `place-self`), why the shorthand behaves inconsistently across versions, and `width: fit-content; height: fit-content` as a robust alternative that doesn't rely on grid self-alignment.""",
+
+"""**Task (Code Generation):**
+Implement a CSS scroll-driven animation — a reading progress bar:
+
+```css
+@keyframes grow-progress {
+  from { transform: scaleX(0); }
+  to   { transform: scaleX(1); }
+}
+
+.progress-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: var(--brand-primary);
+  transform-origin: left;
+  animation: grow-progress linear;
+  animation-timeline: scroll(root block);
+}
+```
+
+Show: the `animation-timeline: scroll()` syntax, `scroll(root block)` for the document root's block (vertical) scroll axis, `view()` timeline for element-in-viewport animations, `animation-range: entry 0% entry 100%` for playing an animation as an element enters the viewport, and `@supports (animation-timeline: scroll())` fallback using a JavaScript `IntersectionObserver` + CSS variable update.""",
+
+"""**Debug Scenario:**
+A developer creates a CSS animation but `animation-play-state: paused` set from JavaScript doesn't pause it. The animation continues running:
+
+```ts
+element.style.animationPlayState = 'paused'; // doesn't work
+```
+
+Investigation shows the animation is defined in a CSS class, and inline styles have lower specificity than `!important` rules in the stylesheet that override `animation-play-state`.
+
+Actually, inline styles have HIGHER specificity than class rules. The real issue is the property name — JavaScript uses camelCase: `animationPlayState`, not kebab-case. Show: `element.style.animationPlayState = 'paused'` (correct camelCase), how `getComputedStyle(element).animationPlayState` reads the current value, and toggling via CSS class vs inline style (the class approach requires `!important` in the class rule to beat inline styles).""",
+
+"""**Task (Code Generation):**
+Build a CSS-only accessible mega-menu with keyboard navigation:
+
+```html
+<nav aria-label="Main Navigation">
+  <ul role="menubar">
+    <li role="none">
+      <button role="menuitem" aria-haspopup="true" aria-expanded="false">Products</button>
+      <div role="menu" aria-label="Products Submenu">
+        <a role="menuitem" href="/web">Web Apps</a>
+        <a role="menuitem" href="/mobile">Mobile Apps</a>
+      </div>
     </li>
   </ul>
 </nav>
 ```
 
-Show: `:focus-within` to show dropdown when any child has focus, CSS transitions for smooth open/close, `visibility: hidden` vs `display: none` for accessibility (screen readers can still discover `visibility: hidden` content when parent is `:focus-within`), and `tabindex="-1"` management for proper tab order.""",
+Show: `:focus-within` for opening the mega-menu when any child has focus, CSS transitions for smooth open/close, keyboard navigation implementation via JavaScript (arrow keys, Escape to close, Tab order), proper ARIA states (`aria-expanded`, `aria-haspopup`), and why using the HTML `<details>`/`<summary>` elements is a simpler accessible alternative.""",
 
 """**Debug Scenario:**
-A CSS `transition` on `height: auto` doesn't animate — the box snaps from height 0 to the full height instantly.
+A developer uses CSS custom properties for a dark/light theme switch. The `prefers-color-scheme` media query works correctly on initial load, but the JavaScript theme toggle doesn't change the custom property values immediately — there's a 1-frame flicker:
 
-```css
-.accordion-content {
-  height: 0;
-  overflow: hidden;
-  transition: height 0.3s ease;
-}
-.accordion-content.open {
-  height: auto; /* Doesn't animate */
-}
+```ts
+document.documentElement.classList.toggle('dark-mode');
+// Takes ~1 frame to apply — causes visible flash
 ```
 
-CSS can't interpolate between `0` and `auto`. Show four solutions: (1) `max-height` hack (risk: clipping), (2) `grid-template-rows: 0fr → 1fr` (Chrome 107+ only, animates grid tracks), (3) JavaScript `scrollHeight` measurement with inline style, (4) the new `interpolate-size: allow-keywords; height: auto` experimental CSS property.""",
+Adding/removing a class causes a style recalculation. The CSS custom property transition is triggered but the browser batches style changes. Show: using `document.startViewTransition(() => document.classList.toggle('dark'))` for a smooth theme transition using the View Transition API, a CSS `::view-transition-*` rule to customize the theme-switch animation, and disabling the transition for users with `prefers-reduced-motion`.""",
 
 """**Task (Code Generation):**
-Implement a design system's spacing scale using CSS `calc()` and `var()` with a mathematical baseline:
+Implement a CSS masonry layout (before native CSS masonry is available cross-browser):
 
 ```css
-:root {
-  --space-unit: 4px;
-  --space-1: calc(var(--space-unit) * 1);   /* 4px */
-  --space-2: calc(var(--space-unit) * 2);   /* 8px */
-  --space-4: calc(var(--space-unit) * 4);   /* 16px */
-  --space-8: calc(var(--space-unit) * 8);   /* 32px */
-  --space-16: calc(var(--space-unit) * 16); /* 64px */
+/* Option 1: CSS columns (column masonry) */
+.masonry-columns {
+  columns: 3;
+  column-gap: 1rem;
 }
-```
+.masonry-item { break-inside: avoid; margin-bottom: 1rem; }
 
-Show: the complete 12-step scale, a `@layer` setup for the token definitions, a Sass/PostCSS build step that generates the scale from a single `$space-unit` variable, and `env()` CSS function for accessing system-level spacing (iOS safe areas, etc.).""",
-
-"""**Debug Scenario:**
-A popup overlay uses `backdrop-filter: blur(8px)` for a frosted glass effect. The blur works on Chrome and Safari but has no effect on Firefox.
-
-```css
-.overlay {
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  background: rgba(255, 255, 255, 0.5);
-}
-```
-
-Firefox supports `backdrop-filter` from v103+ but requires enabling it. Show: `@supports (backdrop-filter: blur(8px))` for feature detection, a solid semi-transparent background as the fallback, and the progressive enhancement strategy where the blur is an enhancement (not required for usability). Also show `isolation: isolate` requirement for the blur to work correctly on stacking contexts.""",
-
-"""**Task (Code Generation):**
-Build a CSS-only tabbed interface using `:has()` (no JavaScript):
-
-```html
-<div class="tabs">
-  <input type="radio" name="tab" id="tab1" checked>
-  <input type="radio" name="tab" id="tab2">
-  <label for="tab1">Tab 1</label>
-  <label for="tab2">Tab 2</label>
-  <div class="panel" id="panel1">Content 1</div>
-  <div class="panel" id="panel2">Content 2</div>
-</div>
-```
-
-Using `:has()`:
-```css
-.tabs:has(#tab2:checked) #panel2 { display: block; }
-.tabs:has(#tab1:checked) #panel1 { display: block; }
-```
-
-Show: the complete CSS tabs using `:has()`, the checkbox hack fallback for browsers without `:has()` support, and the accessibility implications (screen reader behavior, ARIA-less tabpanel navigation).""",
-
-"""**Debug Scenario:**
-A table component has `position: sticky` on column headers AND sticky first column, but the first-column sticky cells don't appear above other cells when scrolling horizontally — they appear behind them.
-
-```css
-th:first-child { position: sticky; left: 0; z-index: 2; }
-thead th { position: sticky; top: 0; z-index: 2; }
-thead th:first-child { z-index: 3; } /* Should be on top */
-```
-
-The `z-index: 3` on the corner cell doesn't work because sticky cells create their own stacking context within the table. Show: using `z-index` within the table stacking context hierarchy, the specific CSS fix for table-layout sticky cells, and an alternative JavaScript-based sticky solution using `IntersectionObserver` that avoids the z-index issue entirely.""",
-
-"""**Task (Code Generation):**
-Implement a CSS `@layer` architecture for a design system that prevents specificity wars:
-
-```
-@layer reset, tokens, base, components, patterns, utilities, overrides;
-```
-
-Map each layer to a responsibility:
-- `reset`: normalize.css / modern-normalize
-- `tokens`: CSS custom property definitions
-- `base`: element defaults (h1, p, a)
-- `components`: BEM component styles
-- `utilities`: single-purpose utility classes
-- `overrides`: context-specific overrides
-
-Show: how to import third-party styles into specific layers, `@layer` with separate files using `@import "file.css" layer(reset)`, and why a utility class in `utilities` layer always beats a component style in `components` regardless of selector specificity.""",
-
-"""**Debug Scenario:**
-A `position: absolute` element inside a `transform: rotate(45deg)` parent is being positioned incorrectly. The developer expects the absolute child to be positioned relative to the `<body>`, but it's positioned relative to the rotated parent.
-
-```css
-.parent { transform: rotate(45deg); position: relative; }
-.child { position: absolute; top: 0; left: 0; } /* positioned relative to .parent */
-```
-
-CSS transforms create a new containing block for absolutely positioned descendants. Show: this interaction between `transform` and position (containing blocks), how `will-change: transform` has the same effect even without an active transform value, and workarounds (render child in a portal or using fixed positioning with JavaScript coordinates).""",
-
-"""**Task (Code Generation):**
-Build a CSS-only carousel/slider with infinite looping and snap points:
-
-```css
-.carousel {
-  display: flex;
-  overflow-x: scroll;
-  scroll-snap-type: x mandatory;
-  scroll-behavior: smooth;
-  -webkit-overflow-scrolling: touch;
-}
-.slide {
-  scroll-snap-align: start;
-  flex: 0 0 100%;
-}
-```
-
-Show: CSS `scroll-snap-align: center` for centered snapping vs `start`, using `scroll-padding` for offset snapping (accounting for sticky headers), infinite loop using JS + `scrollTo` (pure CSS can't infinite loop), and `scrollend` event (new 2023) for detecting when snap animation completes versus `scroll` event throttling.""",
-
-"""**Debug Scenario:**
-A CSS animation using `perspective` for a 3D card flip effect looks different on different monitors. On monitors with high-resolution (4K), the perspective appears smaller (the 3D effect is less dramatic). On 1080p monitors it looks right.
-
-`perspective: 800px` is a fixed pixel value. On 4K displays, 800px is proportionally smaller relative to the element's visual size (due to device pixel ratio). Show: using `perspective: 80vw` for viewport-relative perspective, or calculating perspective relative to the element's own size using `perspective: 500%`, and the `perspective-origin` property for the vanishing point.""",
-
-"""**Task (Code Generation):**
-Implement a complete CSS theming system using `@layer` and custom properties for a SaaS product with white-labeling:
-
-```css
-@layer tokens {
-  :root {
-    /* Default theme */
-    --brand-primary: #6366f1;
-    --brand-secondary: #8b5cf6;
-  }
-  
-  [data-brand="acme"] {
-    --brand-primary: #dc2626;
-    --brand-secondary: #ea580c;
-  }
-}
-```
-
-Show: the token hierarchy (brand → semantic → component), how white-label themes are applied via `data-brand` attribute set in middleware, runtime theme switching without flash, and a TypeScript `getThemeVar(key: keyof ThemeTokens)` function that provides autocomplete for CSS variable names.""",
-
-"""**Debug Scenario:**
-A multi-column form layout uses CSS Grid with `grid-template-areas`. On a narrow screen, the form should switch to a single column. But on narrow screens, some fields overlap each other instead of wrapping:
-
-```css
-.form {
+/* Option 2: Grid + JavaScript height measurement */
+.masonry-grid {
   display: grid;
-  grid-template-areas:
-    "name email"
-    "phone address";
-  grid-template-columns: 1fr 1fr;
-}
-@media (max-width: 600px) {
-  .form { grid-template-areas: "name" "email" "phone" "address"; } /* forgot to reset columns */
+  grid-template-columns: repeat(3, 1fr);
+  grid-auto-rows: 1px; /* fine grain for span calculation */
 }
 ```
 
-The responsive fix forgets to reset `grid-template-columns`. Show: the complete responsive grid fix, `grid-template` shorthand that sets both areas AND columns in one declaration, and using `auto-fit`/`auto-fill` as an alternative to eliminate the need for media queries entirely.""",
-
-"""**Task (Code Generation):**
-Implement a CSS color system using `oklch()` color space for perceptually uniform colors:
-
-```css
-:root {
-  /* Primary color scale in oklch: */
-  --primary-50:  oklch(97% 0.015 265);  /* near-white */
-  --primary-500: oklch(60% 0.2 265);    /* brand color */
-  --primary-900: oklch(25% 0.1 265);    /* near-black */
-}
-```
-
-Show: the `oklch(lightness chroma hue)` syntax, why `oklch` produces more perceptually uniform scales than `hsl` (equal lightness steps look equal to human eyes), a Sass/PostCSS function that generates a full 10-step scale from a single base color, and the `color-mix(in oklch, ...)` function for creating tints/shades.""",
+Show: the CSS columns approach (items flow column-by-column, not row-by-row), the JavaScript grid span approach (`grid-row: span N` where N = itemHeight / rowGap), and the native `grid-template-rows: masonry` experimental syntax (behind flag in Firefox), with feature detection to use native when available.""",
 
 """**Debug Scenario:**
-A card component has a `:hover` state that changes `box-shadow` and scales the card up. The transition fires correctly on hover-in but the shadow doesn't transition on hover-out — it snaps back instantly.
+A CSS module has a style that works in development (Webpack dev server) but not in production (Vite build):
 
 ```css
-.card {
-  transition: transform 0.2s ease;
-  /* Missing: box-shadow not in transition list */
-}
-.card:hover {
-  transform: scale(1.02);
-  box-shadow: 0 20px 40px rgba(0,0,0,0.15);
+/* button.module.css */
+:global(.primary-theme) .button { background: blue; } /* works in dev, breaks in prod */
+```
+
+Vite uses Lightning CSS (not PostCSS) for production CSS processing. `:global()` is a CSS Modules syntax for opting out of scoping — Lightning CSS processes it differently. In production output, the rule becomes `.primary-theme .button_abc123` instead of `.primary-theme .button`.
+
+Show: the correct CSS Modules syntax for global ancestor selectors (`@global { ... }` or `.button:global(.active)`), the Vite config to ensure CSS Modules settings match between dev and production, and using `composes` for cross-file class composition as an alternative.""",
+
+"""**Task (Code Generation):**
+Build a CSS animation library with 12 entrance animations as CSS classes:
+
+```css
+.animate-fade-in     { animation: fadeIn 0.4s ease forwards; }
+.animate-slide-up    { animation: slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+.animate-zoom-in     { animation: zoomIn 0.3s ease forwards; }
+.animate-bounce-in   { animation: bounceIn 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) forwards; }
+```
+
+Show: the 12 `@keyframes` definitions (fade, slide up/down/left/right, zoom, bounce, flip, rotate, blur, shake, heartbeat), CSS custom properties for `--duration` and `--delay` overrides, `prefers-reduced-motion` reducing all animations to simple opacity fade, and the `data-animate="in-view"` attribute pattern using Intersection Observer to apply the animation class when the element enters the viewport.""",
+
+"""**Debug Scenario:**
+A design system uses CSS logical properties (`margin-block-start`, `padding-inline`) for internationalization (RTL language support). In Safari 14, the properties are not recognized and margins are applied incorrectly.
+
+Show: the Safari 14 support timeline for CSS logical properties (shipped in Safari 15), a PostCSS plugin (`postcss-logical`) that transforms logical properties to physical fallbacks for older Safari, the `@supports (margin-block: 0)` feature detection to progressively enhance, and `writing-mode: horizontal-tb` (the default, where logical and physical properties produce identical results) vs `writing-mode: vertical-rl` where logical properties shine.""",
+
+"""**Task (Code Generation):**
+Implement a glassmorphism card component with correct browser support:
+
+```css
+.glass-card {
+  background: rgba(255, 255, 255, 0.15);
+  backdrop-filter: blur(12px) saturate(180%);
+  -webkit-backdrop-filter: blur(12px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 16px;
+  box-shadow: 
+    0 8px 32px rgba(0, 0, 0, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3);
 }
 ```
 
-The `transition` property only applies to `transform`. Show: adding `box-shadow` to the transition list, the `transition: all 0.2s` shorthand (with performance warning — `all` can trigger unnecessary transitions on inherited properties), and a CSS custom property approach that transitions the shadow opacity instead of the shadow value itself (for better performance).""",
+Show: the `@supports (backdrop-filter: blur(1px))` check with a solid background fallback for Firefox, the performance warning (`backdrop-filter` triggers GPU compositing — avoid on frequently-repainting elements), and why glassmorphism requires a colorful and textured background behind the card to look good (using a CSS gradient background or blurred image).""",
 
-"""**Task (Code Generation):**
-Build a CSS-only star rating component that works without JavaScript:
+"""**Debug Scenario:**
+A developer sets an SVG icon's `fill` to `currentColor` but in Safari, the icon appears black even though the surrounding text is white:
 
 ```html
-<div class="star-rating">
-  <input type="radio" name="rating" id="star5" value="5">
-  <label for="star5">★</label>
-  <!-- 4, 3, 2, 1 stars (in reverse DOM order) -->
-</div>
+<button style="color: white">
+  <svg viewBox="0 0 24 24">
+    <path fill="currentColor" d="..." />
+  </svg>
+  Label
+</button>
 ```
 
-Show: the reverse-order input trick (CSS can only select subsequent siblings, so stars are in reverse DOM order), `:has()` as the modern alternative without reverse ordering, making stars fill based on hover and selection using `~` sibling combinator, and the accessibility version with proper ARIA `role="radiogroup"` and `aria-label`.""",
-
-"""**Debug Scenario:**
-A responsive navigation bar uses CSS Grid. The logo is in the left, navigation in the center, and CTA button on the right. On mobile, the layout collapses but the center element (nav links) overflows instead of hiding.
-
-```css
-.navbar { display: grid; grid-template-columns: auto 1fr auto; }
-```
-
-The `1fr` column expands to fill space but the nav links inside don't wrap or hide when the viewport is too narrow. Show: `min-width: 0` on the `1fr` column to prevent expansion, `overflow: hidden` + `text-overflow: ellipsis` for graceful overflow, the mobile pattern using `@media` to switch to a Column Grid for the hamburger menu, and `@container` queries for component-level responsiveness.""",
-
-"""**Task (Code Generation):**
-Implement a complete dark mode system using CSS custom properties with NO JavaScript flash:
+In Safari, `currentColor` works correctly. The issue is the SVG file was pasted with an explicit `fill="black"` attribute on the `<svg>` element that overrides the `fill="currentColor"` on `<path>`:
 
 ```html
-<!-- In <head>, before CSS loads: -->
-<script>
-  // Synchronously read preference before first paint:
-  document.documentElement.dataset.theme = 
-    localStorage.theme ?? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
-</script>
+<svg viewBox="0 0 24 24" fill="black"> <!-- overrides path's fill -->
 ```
 
-Show: the inline script placement (must be first in `<head>`, before `<link rel="stylesheet">`), the CSS custom property definitions for both themes, why this beats `@media (prefers-color-scheme)` alone (user override capability), and integrating with Next.js's `<Script strategy="beforeInteractive">` for the App Router.""",
-
-"""**Debug Scenario:**
-A CSS Grid layout has `grid-template-columns: repeat(3, 1fr)`. When an item uses `grid-column: span 2`, the next item wraps to the next row, leaving a visual gap in the grid.
-
-```css
-.grid { display: grid; grid-template-columns: repeat(3, 1fr); }
-.wide { grid-column: span 2; }
-/* Gap visible to the right of .wide item */
-```
-
-CSS Grid places items sequentially and won't backfill gaps by default. Show: `grid-auto-flow: dense` to enable packing (fills gaps with smaller items), why `dense` changes the visual order (may not match DOM order, hurting accessibility), and the explicit placement alternative that avoids gaps without `dense`.""",
+Show: removing the explicit `fill` attribute from the `<svg>` parent, setting `fill="inherit"` on the SVG root as a CSS-agnostic fix, and linting SVG files with a custom ESLint rule that warns about hardcoded `fill` values.""",
 
 """**Task (Code Generation):**
-Build a CSS animation system for page transitions in a Next.js App Router application:
+Build a responsive CSS timeline component:
 
-```css
-/* Entry/exit animations per route: */
-@keyframes slideInFromRight  { from { transform: translateX(100%); opacity: 0; } }
-@keyframes slideOutToLeft    { from { transform: translateX(0); opacity: 1; } to { transform: translateX(-100%); opacity: 0; } }
+```html
+<ol class="timeline">
+  <li class="timeline-item timeline-item--left">
+    <div class="timeline-marker"></div>
+    <div class="timeline-content"><h3>2020</h3><p>Founded</p></div>
+  </li>
+  <li class="timeline-item timeline-item--right">...</li>
+</ol>
 ```
 
-Show: the `View Transition API` for browser-native page transitions (`document.startViewTransition()`), Next.js App Router integration using `router.push` wrapped in `startViewTransition`, `::view-transition-old(root)` and `::view-transition-new(root)` CSS targets, and the `@supports` fallback for browsers without View Transition API support.""",
+Show: the CSS Grid timeline (center line using a grid column, alternating left/right placement), the vertical line using `::before` on `.timeline` (`position: absolute; left: 50%; width: 2px`), the animated marker circles using `::before` with `scale()` transition on hover, mobile layout where all items are on one side, and `@media (prefers-reduced-motion)` disabling timeline animations.""",
 
 """**Debug Scenario:**
-A CSS-in-JS library (`emotion`) generates class names that interfere with a user-installed browser extension that injects its own CSS. The extension targets `.emotion-class` patterns and accidentally overrides button styles.
-
-Show: using a custom class name prefix in Emotion config (`@emotion/cache` with `key` option), scoping all component styles with a unique container class (`[data-app="my-app"] .button { ... }`), and the `important: true` option in `StylesProvider` (MUI) to ensure styled component styles take precedence. Explain the ethical and UX considerations of using `!important` at scale.""",
-
-"""**Task (Code Generation):**
-Implement a `@theme` block using the new CSS `@scope` rule for scoped component theming:
+A table component has `position: sticky` headers. When the user scrolls, the sticky header works but text in the header appears semi-transparent — the table rows below are visible through the header:
 
 ```css
-@scope (.card-primary) {
-  :scope { background: var(--color-primary-light); }
-  .card-title { color: var(--color-primary-dark); }
-  .card-cta { background: var(--color-primary); color: white; }
-}
-
-@scope (.card-ghost) {
-  :scope { background: transparent; border: 1px solid currentColor; }
+thead th {
+  position: sticky;
+  top: 0;
+  background: white; /* should block rows below */
 }
 ```
 
-Show: `@scope` basic syntax, the scoping limit (lower boundary of scope), how `@scope` prevents style leakage into nested components, browser support and the PostCSS `@csstools/postcss-scope-selector` polyfill, and comparison with CSS Modules and Shadow DOM for style isolation.""",
+The style looks correct. Investigation reveals the `<table>` has `border-collapse: collapse` set. `border-collapse: collapse` removes rounded borders but also prevents the sticky cell from creating its own stacking context for background painting — in older browsers and some edge cases, this causes background rendering artifacts.
 
-"""**Debug Scenario:**
-A CSS transition is applied to a button's `color` and `background-color`. The button's text transitions smoothly, but the developer notices the transition doesn't fire when the button is in a `:disabled` state and is then re-enabled.
-
-```css
-.button { transition: background-color 0.2s ease, color 0.2s ease; }
-.button:disabled { background-color: #ccc; color: #999; pointer-events: none; }
-```
-
-When `disabled` attribute is removed, the transition from gray to primary color fires but the text color transition doesn't. Investigation shows `color` is being inherited from a parent that already updated. Show: explicit `color` on both `.button` and `.button:not(:disabled)` states, and why CSS transitions only fire when the computed value changes from a previous explicitly set value (not inherited changes).""",
+Show: switching to `border-collapse: separate; border-spacing: 0` (same visual result, fixes sticky background), adding `z-index: 1` to sticky headers, and the CSS `isolation: isolate` workaround.""",
 
 """**Task (Code Generation):**
-Build a responsive CSS calendar component using Grid without JavaScript for layout:
+Implement a CSS-first form validation styling without JavaScript using `:has()`:
 
 ```css
-.calendar-grid {
-  display: grid;
-  grid-template-columns: repeat(7, 1fr); /* 7 days */
+/* Real-time validation using :has() and :invalid */
+.form-group:has(:invalid:not(:placeholder-shown)) .error-message {
+  display: block; /* show error only after user has typed (not :placeholder-shown) */
 }
 
-.day-offset-1 { grid-column-start: 2; } /* Month starts on Tuesday */
-.day-offset-6 { grid-column-start: 7; } /* Month starts on Sunday */
+.form-group:has(:valid) .success-icon {
+  display: block;
+}
+
+input:invalid:not(:placeholder-shown) {
+  border-color: #ef4444;
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1);
+}
 ```
 
-Show: the complete calendar grid CSS, how to implement week number column (8 columns: week number + 7 days), current day highlighting with `::today-like` styling using custom data attribute `data-today`, event dots using absolute positioning, and how `grid-row: span X` handles multi-day events with overflow to next row.""",
+Show: HTML5 native validation attributes (`required`, `pattern`, `minlength`, `type="email"`), the `:placeholder-shown` trick to detect untouched inputs, `:has()` for parent-conditional styling (show error in the parent `.form-group` when child input is invalid), and the submit button state: `form:invalid button[type="submit"] { opacity: 0.5; cursor: not-allowed; }`.""",
 
 """**Debug Scenario:**
-An SVG icon system uses `currentColor` to inherit text color, but icons inside buttons with `color: white` text appear white correctly — except on hover, where the button has `filter: brightness(0.9)` applied and icons appear dimmed more than the text.
+A developer adds `transition: all 0.3s ease` to a component for convenience but reports React performance issues — every state update causes long paints.
+
+`transition: all` transitions EVERY animatable CSS property, including `opacity`, `transform`, `width`, `height`, and also `max-height`, `padding`, `margin`, `color`, etc. Even trivial state changes that trigger class updates cause full transition computations.
+
+Show: listing only the specific properties needed (`transition: opacity 0.3s ease, transform 0.3s ease`), categorizing CSS properties by transition cost (composited: `opacity`, `transform` — GPU composited; layout-triggering: `width`, `height`, `padding` — expensive; paint-triggering: `color`, `background` — medium), and Chrome DevTools Performance panel for diagnosing paint/composite times.""",
+
+"""**Task (Code Generation):**
+Implement a CSS `field-sizing: content` textarea that auto-grows to fit its content:
 
 ```css
-.button:hover { filter: brightness(0.9); }
-.button svg { fill: currentColor; } /* Icon also gets brightness filter */
+/* Modern approach (Chrome 123+): */
+textarea {
+  field-sizing: content;      /* auto-grows with content */
+  min-height: 3rem;
+  max-height: 20rem;
+  overflow-y: auto;           /* scroll when max-height reached */
+  resize: none;               /* disable manual resize since it auto-sizes */
+}
+
+/* Fallback for browsers without field-sizing: */
+@supports not (field-sizing: content) {
+  textarea { height: auto; }
+}
 ```
 
-CSS `filter` applies to the entire element and its subtree. Show: applying `filter` only to the background using a pseudo-element (`::before` with the background color), using `backdrop-filter` on the button's overlay, and `mix-blend-mode` as an alternative for hover effects that don't affect child element colors.""",
+Show: the `field-sizing: content` specification, the JavaScript fallback that measures `scrollHeight` and sets `height` explicitly on `input` event (`textarea.style.height = auto; textarea.style.height = textarea.scrollHeight + 'px'`), why `height: auto` must be set before measuring `scrollHeight` (to collapse before measuring), and `@supports` for progressive enhancement.""",
+
+"""**Debug Scenario:**
+A CSS `container query` doesn't trigger when the container's size changes. The developer wrote:
+
+```css
+.sidebar { container-type: inline-size; }
+
+@container (min-width: 300px) {
+  .card { display: grid; } /* doesn't trigger */
+}
+```
+
+The `.card` element is a direct child of `.sidebar`. Investigation shows `.sidebar` has `width: 100%` and its parent `<main>` has `display: flex`. The container query responds to the CONTAINER element's size — `.sidebar`'s computed width. The parent `<main>` has `overflow: hidden` which clips the sidebar to 0px in one layout variation.
+
+Show: the debugging approach using browser DevTools' Container Query overlay, verifying the container's computed size with `getComputedStyle(sidebar).inlineSize`, fixing the parent overflow issue, and the difference between `container-type: inline-size` (only inline dimension) vs `container-type: size` (both dimensions).""",
 
 ]

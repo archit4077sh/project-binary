@@ -1,279 +1,361 @@
 """
-snippets/q_performance.py — BATCH 3: 28 brand-new Performance questions
-Zero overlap with batch1 or batch2 archives.
+snippets/q_performance.py — BATCH 4: 28 brand-new Performance questions
+Zero overlap with batch1, batch2, or batch3 archives.
 """
 
 Q_PERFORMANCE = [
 
 """**Task (Code Generation):**
-Implement a `useIdleCallback` hook that schedules non-urgent work during browser idle time:
+Implement a `usePaintTiming` hook that reports First Paint, First Contentful Paint, and Largest Contentful Paint metrics:
 
 ```ts
-useIdleCallback(() => {
-  prefetchNextPageData(); // run when browser is idle
-}, { timeout: 3000 }); // force-run after 3s even if not idle
+const { fp, fcp, lcp, ttfb } = usePaintTiming();
+// fp: 120ms, fcp: 280ms, lcp: 1800ms, ttfb: 80ms
 ```
 
-Show: the `requestIdleCallback` API with the `IdleDeadline` parameter, how to check `deadline.timeRemaining()` for chunking long tasks, the `cancelIdleCallback` cleanup, and a polyfill using `setTimeout(fn, 1)` for browsers that don't support it. Explain the difference between idle callbacks and microtasks.""",
+Show: `PerformanceObserver` for `paint` entries, `largest-contentful-paint` entries, `navigation` entries for TTFB, collecting all registered entries before the observer was created using `getEntriesByType`, and how to report these to an analytics endpoint with `navigator.sendBeacon` on `visibilitychange` to avoid blocking page unload.""",
 
 """**Debug Scenario:**
-A Next.js app's Lighthouse score for Largest Contentful Paint (LCP) is 4.8 seconds. The LCP element is a hero image loaded with `<img>` (not `next/image`). 
+A Next.js app's page bundle includes `moment.js` (70KB gzipped) but the app only uses `moment().format('YYYY-MM-DD')`. The developer replaces it with a smaller alternative, but the bundle size doesn't decrease.
 
-The image is 2.4MB, served without a CDN, not preloaded, and not using modern formats. For each of the four issues, show the exact fix: `next/image` config for automatic WebP/AVIF conversion, `<link rel="preload">` in `<head>`, uploading to Vercel's image CDN, and `sizes` attribute for responsive loading. Predict the LCP improvement for each fix.""",
-
-"""**Task (Code Generation):**
-Build a `<LazyImage>` component that:
-- Loads the image only when it's within 200px of the viewport (IntersectionObserver rootMargin)
-- Shows a low-quality placeholder (LQIP) while loading (a 20px blurred version)
-- Transitions from blurred placeholder to sharp image with a CSS cross-fade
-- Handles `srcset` and `sizes` for responsive images
-- Reports load time to an analytics service
-
-Show the component, the IntersectionObserver setup, and the CSS transition.""",
-
-"""**Debug Scenario:**
-A React app's bundle contains three versions of `lodash` adding 450KB: `lodash` (v4.17, full), `lodash-es` (v4.17, ESM), and `@types/lodash` (dev only). Tree shaking doesn't reduce lodash because the app uses `import _ from 'lodash'` (default import).
-
-Show Webpack bundle analysis commands to find the duplication, the exact import pattern change (`import debounce from 'lodash/debounce'`) that enables tree shaking, the Webpack `resolve.alias` to redirect all lodash imports to lodash-es, and which lodash methods to replace with native JavaScript in 2024.""",
+Investigation with `next build --debug` output shows `moment` is still included because a dependency (`react-datepicker`) imports `moment` as a peer. Show: using `resolve.alias` in `next.config.js` to redirect `moment` → `dayjs`, the `babel-plugin-import` for tree-shaking datepicker components, and measuring before/after with `@next/bundle-analyzer`.""",
 
 """**Task (Code Generation):**
-Implement a Client-Side Performance Monitor component that tracks and reports Core Web Vitals in real time:
-
-```tsx
-<PerformanceMonitor
-  onMetric={({ name, value, rating }) => analytics.track(name, { value, rating })}
-  debug // shows floating overlay with live metrics
-/>
-```
-
-Capture: LCP (PerformanceObserver `largest-contentful-paint`), FID/INP (`event` type observer), CLS (`layout-shift` accumulated score), TTFB (`navigation` entry), FCP. Show the observer setup, score rating thresholds (good/needs improvement/poor), and the overlay UI.""",
-
-"""**Debug Scenario:**
-A server-side rendered page's Time To First Byte (TTFB) averages 1.8 seconds. Profiling shows the bottleneck is a single database query fetching all products (2,000 rows) with no pagination, running synchronously before any HTML is sent.
-
-Show the streaming solution using Next.js 14's `loading.tsx` (Suspense boundary), how React's streaming SSR sends HTML chunks incrementally, the database query optimization (cursor-based pagination + covering index), and how `generateMetadata` vs page data fetching affects TTFB.""",
-
-"""**Task (Code Generation):**
-Implement a `useRenderBudget` hook that warns when a component exceeds a render time budget:
+Build a `ParallelDataLoader` that loads multiple resources in parallel with priority and circuit-breaking:
 
 ```ts
-useRenderBudget('UserTable', 16); // warn if render > 16ms (one frame)
+const loader = new ParallelDataLoader({
+  maxConcurrent: 4,
+  timeout: 5000,
+  retries: 2,
+});
+
+const [user, orders, recommendations] = await loader.all([
+  { key: 'user',            load: () => getUser(id),           priority: 'high' },
+  { key: 'orders',          load: () => getOrders(id),         priority: 'medium' },
+  { key: 'recommendations', load: () => getRecommendations(id),priority: 'low' },
+]);
 ```
 
-Show: using `performance.mark()` and `performance.measure()` to time renders, wrapping with `useLayoutEffect` for post-render measurement, collecting statistics (mean, p95, p99 over last 100 renders), logging warnings in development only, and how to integrate with React DevTools profiler API (`Profiler` component).""",
+Show: priority queue ordering, concurrent slot management with a semaphore, timeout with `AbortController`, retry with exponential backoff, and partial results (return what succeeded even if low-priority fails).""",
 
 """**Debug Scenario:**
-A Single Page Application has a JavaScript bundle of 1.8MB (uncompressed). After enabling Brotli compression on the server, the network transfer drops to 420KB — but mobile users on slow 3G connections still experience a 12-second Time to Interactive because the main thread is busy parsing and executing JavaScript.
+A React app's Interaction to Next Paint (INP) score is 620ms (very poor, threshold is 200ms). The worst interaction is clicking a "Add to cart" button. Profiler shows:
 
-Explain the Parse/Compile/Execute cost of JavaScript vs CSS, show how to measure parse time with Chrome DevTools' Coverage tab, and implement the fix: aggressive code splitting with `React.lazy` per route, moving non-critical scripts to Web Workers with Comlink, and deferring analytics initialization to after TTI.""",
-
-"""**Task (Code Generation):**
-Build a `<ProgressiveTable>` that renders large datasets progressively:
-- Renders the first 50 rows immediately (above the fold)
-- Schedules remaining rows in idle callbacks (50 rows per chunk)
-- Shows a progress indicator while rows are being rendered
-- Allows the user to cancel progressive loading and jump straight to full render if they scroll fast
-
-Show the `requestIdleCallback` chunking logic, the React state management for progressive appending, and why this approach is better than pagination for search result tables.""",
-
-"""**Debug Scenario:**
-A developer runs `npm run build` and notices the production bundle is 200KB larger than expected. `source-map-explorer` shows `date-fns` contributing 180KB even though only `format` and `parseISO` are used.
-
-Investigation shows the import is:
-```ts
-import { format, parseISO } from 'date-fns';
+```
+onClick → setState → re-render (420ms) → DOM update (50ms)
 ```
 
-This should tree-shake correctly. But the `tsconfig.json` has `"moduleResolution": "node"` which resolves to the CJS build of `date-fns` (no tree shaking). Show the full fix: switching to `"moduleResolution": "bundler"` or `"node16"`, the `date-fns/esm` subpath, and verifying with `webpack-bundle-analyzer`.""",
+The 420ms re-render happens because clicking "Add to cart" triggers a global state update that causes the entire product catalog (800 items) to re-render.
+
+Show: using `startTransition` to defer the non-urgent catalog re-render, `React.memo` + `useCallback` to prevent catalog items from re-rendering entirely (the item count doesn't change, only cart state changes), and measuring the improvement with `PerformanceObserver` for `event` entries.""",
 
 """**Task (Code Generation):**
-Implement a `prefetchOnHover` utility that preloads page data when the user hovers a link (before clicking):
+Implement a `useImageOptimization` hook that automatically selects the best image variant:
 
 ```ts
-// Attach to all internal links automatically:
-prefetchOnHover({
-  selector: 'a[href^="/"]',
-  loader: (href) => fetch(href, { priority: 'low' }),
-  debounce: 100, // only prefetch after hovering 100ms
-  maxConcurrent: 3,
+const { src, loading } = useImageOptimization('/hero.jpg', {
+  intrinsicWidth: 1200,
+  displayWidth: containerWidth,
+  devicePixelRatio: window.devicePixelRatio,
+  formatPreference: ['avif', 'webp', 'jpg'],
+  quality: 80,
 });
 ```
 
-Show: the event delegation setup, the `fetch` with low priority hint, deduplication (don't prefetch the same URL twice), abort on `mouseleave` if fetch hasn't started, and browser cache storage so navigating to prefetched pages is instant.""",
+Show: `<picture>` element generation from the hook's output, the CDN URL template for requesting specific dimensions and formats, client-side format support detection using `createImageBitmap`, and calculating the optimal `srcset` widths for a given display width (1x, 1.5x, 2x, 3x DPR variants).""",
 
 """**Debug Scenario:**
-A Next.js app using `next/font` shows a Font Flash (FOUT) on initial load despite `next/font` promising no layout shift. The flash affects the heading font.
+A developer measures their app's Time to Interactive (TTI) using Lighthouse and gets 8.2 seconds. The waterfall shows a 4-second "Long Task" immediately after JS parse. The Lighthouse treemap shows `analytics.js` (from a third-party analytics provider) as the culprit.
 
-Investigation shows `next/font/google` is configured correctly, but the font is applied to a `className` on a Client Component that only mounts after hydration — the server renders without the font class.
-
-Explain why applying font classes to Client Components causes FOUT vs applying them to the `<html>` element in the root layout. Show the correct font integration pattern and the CSS `font-display: optional` tradeoff.""",
+Show: loading third-party scripts with `<Script strategy="lazyOnload">` (Next.js), creating a Partytown setup that moves third-party scripts to a Web Worker thread (keeps main thread free), the Partytown configuration in `next.config.js`, and validating the fix with Chrome's Long Tasks API (`PerformanceObserver` for `longtask` type).""",
 
 """**Task (Code Generation):**
-Build a `useBackgroundSync` hook that queues failed API requests and syncs them when the connection is restored:
+Build a `useComputeInWorker` hook that offloads expensive calculations to a Web Worker:
 
 ```ts
-const { queue, pendingCount, sync } = useBackgroundSync({
-  onSync: async (request) => {
-    await fetch(request.url, request.options);
-  },
-  storage: 'indexeddb', // survive page refresh
-});
-```
+const { result, isComputing, cancel } = useComputeInWorker(
+  workerFn,   // function to run in worker (serialized to blob URL)
+  dependency, // deps — recomputes when this changes
+);
 
-Integrate with the Service Worker Background Sync API for reliability when the page closes. Show the hook, the SW registration, and the `sync` event handler in the service worker. Handle the case where Background Sync isn't supported (polyfill with `online` event).""",
-
-"""**Debug Scenario:**
-A dashboard with 12 chart components renders slowly (800ms) when any filter is changed. Each chart uses `recharts` and receives a filtered dataset. React DevTools Profiler shows all 12 charts re-render even when only 2 are affected by the changed filter.
-
-```ts
-// Parent component:
-const filteredData = useMemo(() => applyFilters(rawData, filters), [rawData, filters]);
-// Passes ALL filtered data to each chart, each chart extracts its own slice
-```
-
-Show the optimization: separate the filtering per-chart (each chart gets its own memoized slice), then use `React.memo` comparison on the slice, reducing re-renders from 12 to 2 on average.""",
-
-"""**Task (Code Generation):**
-Implement a `useConnectionSpeed` hook that measures and tracks network quality:
-
-```ts
-const { downlink, rtt, type, isSlowNetwork } = useConnectionSpeed();
-```
-
-Combine two sources: (1) Network Information API (`navigator.connection`) for passive monitoring, (2) Active measurement by fetching a small known-size resource and measuring time. Show: the measurement fetch with a cache-busting URL, the bytes/milliseconds calculation, smoothing over multiple measurements with a rolling average, and using the result to adaptively load low-res or high-res images.""",
-
-"""**Debug Scenario:**
-A checkout page has a First Input Delay (FID) of 340ms on mobile. The user clicks "Place Order" and the button feels unresponsive for a third of a second. Chrome DevTools Long Tasks shows a 380ms task running when the button is clicked.
-
-The task is a synchronous price recalculation (`recalculate()`) triggered by `onClick` before the API call. The recalculation iterates 5,000 cart promotions.
-
-Show: breaking the work with `setTimeout(fn, 0)` slicing, moving it to a Web Worker with `comlink`, and using `startTransition` to mark the recalculation as non-urgent rendering. Explain which fix reduces FID vs which reduces TTI vs Interaction to Next Paint (INP).""",
-
-"""**Task (Code Generation):**
-Build a `<SmartImage>` component that selects the optimal image format based on browser support:
-
-```tsx
-<SmartImage
-  src="/hero"
-  alt="Hero image"
-  formats={{ avif: '/hero.avif', webp: '/hero.webp', jpg: '/hero.jpg' }}
-  width={1200} height={600}
-/>
-```
-
-Show: `<picture>` element with `<source>` for format negotiation, `srcset` for resolution switching, `loading="lazy"` for below-fold images, `fetchpriority="high"` for LCP images, and a runtime format detection function that uses `createImageBitmap` to test browser support without a server round-trip.""",
-
-"""**Debug Scenario:**
-A React app deployed to Vercel has Cumulative Layout Shift (CLS) of 0.18 (poor, threshold is 0.1). The shift happens 2 seconds after page load when an ad banner loads and pushes content down 90px.
-
-Show the three-part fix: (1) explicit `width` and `height` on the ad container to reserve space before the ad loads, (2) using CSS `aspect-ratio` as a modern alternative to the padding-top hack, (3) loading the ad using `IntersectionObserver` to defer it below the fold so it never causes layout shift for above-fold content. Measure CLS before and after.""",
-
-"""**Task (Code Generation):**
-Implement a compressed in-memory cache for computed values that evicts least-recently-used entries:
-
-```ts
-const cache = new LRUCache<ComputedReport>({ maxSize: 50, ttl: 5 * 60_000 });
-
-const report = cache.getOrCompute('report-2024-q1', () => computeExpensiveReport(params));
-```
-
-Show: the doubly-linked list + hash map LRU implementation, TTL expiration (don't evict early but return stale on TTL miss), `getOrCompute` that prevents duplicate parallel computation for the same key (singleton promise), and React integration via `useRef` to ensure the cache persists across renders without being in state.""",
-
-"""**Debug Scenario:**
-A heavily animated landing page runs at 60fps on desktop but drops to 15fps on a mid-tier Android phone. Chrome DevTools remote debugging shows the main thread is blocked by a CSS animation that modifies `left` and `top` properties:
-
-```css
-@keyframes float {
-  0%, 100% { top: 0px; }
-  50% { top: -20px; }
+// worker fn (runs in a separate thread):
+function workerFn(data: number[]): number {
+  return data.reduce((sum, n) => sum + Math.pow(n, 2), 0);
 }
 ```
 
-Layout-triggering animations can't run on the compositor thread. Show: the exact refactor to use `transform: translateY()` instead, `will-change: transform` to promote the element to its own compositor layer, `contain: strict` to limit style recalculation scope, and the Chrome Layers panel to verify compositor promotion.""",
-
-"""**Task (Code Generation):**
-Build a `ServiceWorkerCache` class that implements cache-first with stale-while-revalidate for a PWA:
-
-```ts
-// In service-worker.ts:
-const apiCache = new ServiceWorkerCache('api-v1', {
-  strategy: 'stale-while-revalidate',
-  maxAge: 60 * 60 * 1000, // 1 hour
-  maxEntries: 100,
-});
-
-self.addEventListener('fetch', (e) => {
-  e.respondWith(apiCache.handle(e.request));
-});
-```
-
-Show the full implementation, cache versioning across SW updates, how to purge old caches on activation, and the `precacheAndRoute` pattern for static assets.""",
+Show: creating a Worker from a function using `URL.createObjectURL(new Blob([...]))`, structured clone transferable types, cancellation via `worker.terminate()`, error handling from worker `onerror`, and why `useEffect` cleanup must terminate the worker.""",
 
 """**Debug Scenario:**
-A developer measures that their app's Time to Interactive (TTI) is 7 seconds on a slow 3G mobile connection. WebPageTest shows the waterfall: HTML (0-500ms), CSS (200-800ms), main JS bundle (500-4000ms), React init (4000-5000ms), data fetch (5000-6500ms), hydration (6500-7000ms).
+A CMS preview page renders 150 Rich Text blocks, each using a heavy markdown parser. The page takes 3 seconds to render on initial load. React DevTools Profiler shows each `<RichTextBlock>` taking 18ms to render.
 
-Identify all optimization opportunities in the waterfall and show the implementations: `<link rel="preconnect">` for API origin, `<link rel="preload" as="script">` for critical chunks, `defer` vs `async` for third-party scripts, and splitting the data fetch to start server-side in parallel with JS loading.""",
-
-"""**Task (Code Generation):**
-Implement a `useScheduler` hook that manages a priority queue of tasks, running high-priority tasks first during idle time:
-
-```ts
-const { schedule, cancel } = useScheduler();
-
-// High priority (runs immediately if browser is idle):
-schedule(() => updateVisibleContent(), { priority: 'user-blocking' });
-// Low priority (runs in background):
-schedule(() => analyticsBatch.flush(), { priority: 'background' });
-```
-
-Show using `scheduler.postTask()` (Chrome 94+) with fallbacks to `requestIdleCallback` and `MessageChannel` for older browsers. Include a React hook that auto-cancels scheduled tasks on component unmount.""",
-
-"""**Debug Scenario:**
-A React app renders a user avatar from Gravatar with `<img src={gravatarUrl}>`. On slow connections, the image takes 2 seconds to load, causing layout shift and a poor user experience. There's no placeholder.
-
-Show how to detect image load state using React, implement three progressive states: (1) colored initials placeholder matching the user's accent color while image loads, (2) low-quality LQIP from a 1px Gravatar variant while full image loads, (3) smooth CSS cross-fade transition to the loaded image. Also handle the case where Gravatar returns a 404 (default to initials permanently).""",
-
-"""**Task (Code Generation):**
-Build a `<Virtualized3DList>` that renders a windowed list with "3D" CSS perspective for a carousel-like effect:
+The blocks are static — their content never changes during the session. `React.memo` is applied but doesn't help because the parent passes an inline `style` object that creates new references on every render:
 
 ```tsx
-<Virtualized3DList
-  items={1000_items}
-  itemHeight={80}
-  visibleCount={7}
-  perspective={800}
-  renderItem={(item, index, distanceFromCenter) => (
-    <Card style={{ opacity: 1 - Math.abs(distanceFromCenter) * 0.15 }} item={item} />
-  )}
+<RichTextBlock content={block.content} style={{ color: theme.text }} />
+```
+
+Show: extracting `style` into a memoized variable outside the rendered JSX, the `React.memo` comparator that deep-compares the `style` prop, and using CSS custom properties instead of inline styles for theme values to avoid the reference change entirely.""",
+
+"""**Task (Code Generation):**
+Implement a `ResourceHints` component that declaratively injects `<link>` preconnect/prefetch/preload hints:
+
+```tsx
+<ResourceHints
+  preconnect={['https://fonts.googleapis.com', 'https://api.example.com']}
+  prefetch={['/about', '/contact']}
+  preload={[
+    { href: '/fonts/Inter.woff2', as: 'font', crossOrigin: 'anonymous' },
+    { href: '/hero.jpg', as: 'image', media: '(min-width: 1200px)' },
+  ]}
 />
 ```
 
-Show: the central item selection logic, CSS `transform: rotateX()` based on item distance from center, the virtual window (only render ±5 from center), smooth scrolling with `requestAnimationFrame`, and keyboard arrow-key navigation.""",
+Show: `ReactDOM.createPortal` into `document.head`, deduplication (don't add the same hint twice), removing hints on unmount, and the performance impact of each hint type (preconnect saves DNS+TCP, prefetch queues documents, preload prioritizes current page resources).""",
 
 """**Debug Scenario:**
-An e-commerce category page fetches 200 product thumbnails. The page loads quickly (HTML delivered in 200ms) but Lighthouse marks First Contentful Paint at 3.2 seconds because the browser waits for 200 image requests.
+A React Native app shows jank (frame drops to 30fps) when scrolling a `<FlatList>` with 1000 items. Each item renders a product card with an image loaded from a URL. React DevTools shows excessive re-renders on the JS thread.
 
-Show: the HTTP/2 multiplexing limit (6 parallel requests per domain for HTTP/1.1, unlimited for HTTP/2 but browser still queues), `loading="lazy"` for below-fold images, `fetchpriority="high"` for the 3 hero images above the fold, image sprite sheets for small icons, and Content-Length headers to help the browser prioritize render-blocking resources.""",
+Show: `FlatList` optimization checklist — `keyExtractor`, `getItemLayout` for fixed height items (skips dynamic height estimation), `initialNumToRender: 10`, `maxToRenderPerBatch: 5`, `windowSize: 5`, `removeClippedSubviews: true` (Android), `React.memo` on the item renderer, `FastImage` library for image caching, and `InteractionManager.runAfterInteractions` for deferred data loading.""",
 
 """**Task (Code Generation):**
-Implement an adaptive polling hook that adjusts its polling interval based on whether the tab is visible and whether new data is being received:
+Build a `useSmartPolling` hook that switches between polling and WebSocket based on connection capability:
 
 ```ts
-const { data, pollInterval } = useAdaptivePolling('/api/notifications', {
-  minInterval: 5_000,   // poll at most every 5s when active
-  maxInterval: 120_000, // poll at most every 2min when idle
-  backoffFactor: 2,     // double interval on each empty response
-  resetOnData: true,    // reset to minInterval when new data arrives
+const { data, connectionType, pollInterval } = useSmartPolling('/api/price', {
+  wsUrl: 'wss://prices.example.com',
+  fallbackInterval: 5000,   // poll every 5s if WS not available
+  onConnectionChange: (type) => analytics.track('connection_type', { type }),
 });
 ```
 
-Show: the interval state machine, Page Visibility API integration (pause when hidden), exponential backoff calculation, and React Query integration as an alternative approach.""",
+Show: WebSocket connection attempt with a 3-second timeout, graceful downgrade to polling if WS fails or is blocked, the re-attempt logic (try WS every 60 seconds in case user's network changes), `navigator.connection.type` check to skip WS on `2g`/`slow-2g`, and TypeScript discriminated union for `connectionType`.""",
 
 """**Debug Scenario:**
-A design agency's marketing site has a JavaScript-heavy hero animation (Three.js scene). The animation runs fine on desktop but on iOS Safari it crashes the browser tab due to memory pressure.
+A Next.js app reports high server CPU usage. Profiling shows the `getServerSideProps` function for the homepage runs for 800ms. The function fetches 5 independent API endpoints sequentially:
 
-DevTools memory snapshot shows the Three.js `WebGLRenderer` isn't being disposed when the hero section scrolls out of view, and a new renderer is created every time it re-enters. The component creates a renderer in `useEffect` but the cleanup function calls `renderer.dispose()` — yet the memory leak persists.
+```ts
+const user = await getUser(id);
+const orders = await getOrders(id);
+const notifications = await getNotifications(id);
+const products = await getProducts();
+const banners = await getBanners();
+```
 
-Diagnose why `renderer.dispose()` alone doesn't release GPU memory in Three.js (need `renderer.forceContextLoss()` + `renderer.domElement.remove()`), and show the complete Three.js cleanup sequence that prevents the iOS crash.""",
+Show: refactoring to parallel `Promise.all`, identifying which calls have data dependencies (must be sequential) vs which are independent (can be parallel), estimated time reduction, and adding `Promise.allSettled` so a failed non-critical call (banners) doesn't break the entire page render.""",
+
+"""**Task (Code Generation):**
+Implement a `useBundlePreloader` hook that preloads lazy chunks based on user behavior:
+
+```ts
+useBundlePreloader({
+  routes: {
+    '/dashboard': () => import('./DashboardPage'),
+    '/settings':  () => import('./SettingsPage'),
+  },
+  strategy: 'hover', // preload on link hover
+  // OR:
+  strategy: 'idle',  // preload on browser idle
+  // OR:
+  strategy: 'viewport', // preload when link is in viewport
+});
+```
+
+Show: React Router `matchPath` for determining which routes to preload, attaching `mouseover` event listeners to `<a>` tags for hover strategy, `requestIdleCallback` for idle strategy, and `IntersectionObserver` for viewport strategy. The import is triggered but not awaited — just starting the chunk download.""",
+
+"""**Debug Scenario:**
+A dashboard app displays 12 `<Chart>` components, each using a `<canvas>` element. On a MacBook with a Retina display (2x DPR), all charts appear blurry.
+
+The canvas is set to CSS dimensions but the drawing resolution isn't scaled:
+
+```ts
+canvas.width = 400;  // logical pixels, not physical
+canvas.height = 300;
+ctx.drawImage(...);
+// On 2x DPR: canvas renders blurry because 400x300 canvas stretched to 800x600 CSS pixels
+```
+
+Show: the correct pattern — `canvas.width = 400 * devicePixelRatio`, `canvas.height = 300 * devicePixelRatio`, `ctx.scale(devicePixelRatio, devicePixelRatio)`, and then setting `canvas.style.width = '400px'`. Explain why this fixes the blur and how to detect DPR changes (external monitor plugged in/out) with `window.matchMedia('screen and (resolution: 2dppx)').addEventListener('change', ...)`.""",
+
+"""**Task (Code Generation):**
+Build a `<ProgressiveHydration>` wrapper that delays hydrating expensive components until they're needed:
+
+```tsx
+<ProgressiveHydration
+  strategy="visible"     // hydrate when in viewport
+  id="user-reviews"
+  fallback={<ReviewsSkeleton />}
+>
+  <UserReviews productId={id} />
+</ProgressiveHydration>
+```
+
+Show: the server rendering the full HTML (including `<UserReviews>`), the client-side wrapper that renders a skeleton and only hydrates (`ReactDOM.hydrateRoot`) when the `IntersectionObserver` fires, and why this reduces Time to Interactive for below-fold content even though the HTML is already present.""",
+
+"""**Debug Scenario:**
+A Next.js app caches API responses in a Redis instance. Cache hit rate is 45% and average response time for cache misses is 1.4s. The product team asks for sub-200ms responses for all users.
+
+Problems identified: (1) Cache key is `userId + productId` — too specific, each user gets their own cache. (2) TTL is 30 seconds — heavy products expire constantly.
+
+Show: redesigning cache keys to `productId` only (user-specific data fetched separately), edge caching popular products with TTL of 1 hour (instead of 30s), `stale-while-revalidate` strategy for near-miss scenarios, and `cache: 'force-cache'` + `next: { tags: ['product', id] }` for Next.js server-side caching.""",
+
+"""**Task (Code Generation):**
+Implement a `useMemoryPressure` hook that degrades gracefully when device memory is low:
+
+```ts
+const { memoryLevel, isLowMemory } = useMemoryPressure({
+  thresholds: {
+    critical: 512,  // MB — use minimal features
+    low: 1024,      // MB — use reduced features
+    normal: 2048,   // MB — full features
+  },
+});
+
+// Usage:
+const maxRenderItems = isLowMemory ? 50 : 500;
+const showAnimations = memoryLevel === 'normal';
+```
+
+Show: `navigator.deviceMemory` for initial classification, `performance.memory` (Chrome-only) for runtime monitoring, a polling interval that adjusts quality settings, and graceful degradation strategies for `critical` memory (disable virtualization, render less, clear image caches).""",
+
+"""**Debug Scenario:**
+A developer sets `cache: 'no-store'` on a database-fetching Server Component to ensure fresh data. But this disables React's request-level deduplication, so the same query runs 8 times (one per component that calls it on the page).
+
+```ts
+// Called in 8 different Server Components on the same page:
+const user = await fetch(`/api/user/${id}`, { cache: 'no-store' }); // 8 network requests
+```
+
+Show: `React.cache()` deduplicates per render tree — wrap the fetch function once, use it everywhere on the page, and get 1 request instead of 8. Explain: `React.cache()` is NOT persistent across requests (new cache per render), so `cache: 'no-store'` behavior is preserved while deduplicating within the same page render.""",
+
+"""**Task (Code Generation):**
+Build a `useNetworkIdle` hook that detects when all in-flight network requests complete:
+
+```ts
+const { isNetworkIdle, pendingRequests, waitForIdle } = useNetworkIdle({
+  idleTimeout: 200, // consider idle after 200ms of no new requests
+});
+
+// Await until network is idle before taking a screenshot:
+await waitForIdle();
+```
+
+Show: monkey-patching `XMLHttpRequest` and `fetch` to track in-flight requests, incrementing/decrementing a counter, the idle detection timer that resets on new requests, `waitForIdle()` returning a Promise that resolves when the counter hits 0 and stays at 0 for `idleTimeout`ms, and cleanup on unmount.""",
+
+"""**Debug Scenario:**
+A static Next.js site (exported with `next export`) has slow cold-start times on Cloudflare Pages Workers because the HTML files are large (each page is 280KB). The large size comes from inline base64-encoded LQIP (Low Quality Image Placeholders) for every image on the page.
+
+Show: moving LQIP from base64 inline (adds bytes to HTML) to CSS `background-image` on a placeholder element (loads after HTML parse), using SVG-based LQIPs (15 bytes vs 2KB for base64), and the `blurhash` library as an alternative that encodes to a short string and decodes in JavaScript.""",
+
+"""**Task (Code Generation):**
+Implement a `measureRenderPhases` utility for fine-grained React performance measurement:
+
+```ts
+const { measure, report } = measureRenderPhases('UserList');
+
+// In component:
+measure('filter');                    // mark start
+const filtered = items.filter(...);
+measure('filter ends');               // mark end → records duration
+measure('sort');
+const sorted = filtered.sort(...);
+measure('sort ends');
+
+// In DevTools:
+report(); // { filter: 2.3ms, sort: 8.1ms, total: 10.4ms }
+```
+
+Show: `performance.mark()` and `performance.measure()` implementation, a React `<Profiler>` wrapper that correlates custom marks with React's onRender callback, and how to expose all recorded measures in the React DevTools Profiler timeline using the User Timing API.""",
+
+"""**Debug Scenario:**
+A developer adds `export const revalidate = 0` to a Next.js page to opt out of caching, expecting the same behavior as `getServerSideProps`. But the page still serves cached responses from Vercel's edge cache.
+
+Show: the three layers of caching in Next.js App Router (React Server Component payload cache, fetch() data cache, and full route cache), how `revalidate = 0` opts out of the full route cache but NOT the edge cache, using `Cache-Control: no-store` as a response header from a Route Handler to bypass Vercel's edge, and how `cookies()` / `headers()` in a Server Component automatically makes a route dynamic (effectively `revalidate = 0`).""",
+
+"""**Task (Code Generation):**
+Build a `<SelectiveHydration>` system that hydrates components in priority order on client load:
+
+```tsx
+// Critical: hydrate immediately
+<Hydrate priority="critical"><Header /></Hydrate>
+
+// High: hydrate in first idle callback
+<Hydrate priority="high"><SearchBar /></Hydrate>
+
+// Low: hydrate when in viewport
+<Hydrate priority="low"><Footer /></Hydrate>
+```
+
+Show: the `<Hydrate>` wrapper that renders the server HTML statically but delays client-side React reconciliation based on priority, using `Suspense` for the hydration boundary, `startTransition` for non-critical hydration, and why this reduces TTI for complex pages.""",
+
+"""**Debug Scenario:**
+A GraphQL query fetches a user profile with fragments spread across 6 components. After a mutation updates the user's avatar, only 2 of the 6 Components re-render. The other 4 show the old avatar.
+
+Apollo Client's normalized cache should update all instances. But 4 components use `useQuery` with a query that doesn't include the `__typename` and `id` fields in their fragments — Apollo can't normalize these objects, so they're stored as embedded (non-normalized) data.
+
+Show: adding `__typename` and `id` to all fragments, Apollo's InMemoryCache normalization algorithm, and using `@client` fields with `readFragment` to manually trigger cache updates for embedded objects that can't be automatically normalized.""",
+
+"""**Task (Code Generation):**
+Implement a `useThrottledCallback` hook that throttles a callback to fire at most once per animation frame:
+
+```ts
+const throttledOnScroll = useThrottledCallback(
+  (e: ScrollEvent) => updateScrollPosition(e.target.scrollTop),
+  'rAF' // requestAnimationFrame throttle
+);
+
+// Also support time-based throttle:
+const throttledSearch = useThrottledCallback(search, 300); // 300ms
+```
+
+Show: rAF-based throttle (cancel pending frame on new call, schedule new frame), time-based throttle (track `lastCalled`, skip if within interval), the `leading` and `trailing` options, how `useCallback` + `useRef` prevents stale closures, and cleanup via `cancelAnimationFrame` in the `useEffect` cleanup.""",
+
+"""**Debug Scenario:**
+A production Next.js deployment on Vercel shows significantly different performance between the first request to a region (cold) vs subsequent requests (warm). Cold requests take 4.2 seconds; warm requests take 180ms.
+
+The performance gap is caused by a Next.js Server Component that runs a full database connection setup on every cold start:
+
+```ts
+const db = new PrismaClient(); // Creates new pool on cold start
+```
+
+Show: the module-level singleton pattern for Prisma in Next.js (with the `global.prisma` trick to prevent multiple instances in dev with HMR), Vercel's edge function warm-up ping, and `prisma.$connect()` called eagerly in a startup file to pre-warm the connection pool before the first real request.""",
+
+"""**Task (Code Generation):**
+Build a `useResizeVirtualizer` that virtualizes items in a container where items have variable heights that can change after render:
+
+```ts
+const { virtualItems, totalHeight, measureRef } = useResizeVirtualizer({
+  count: items.length,
+  estimatedItemHeight: 60,
+  overscan: 3,
+});
+
+<div style={{ height: totalHeight }}>
+  {virtualItems.map(({ index, start }) => (
+    <div ref={measureRef(index)} style={{ position: 'absolute', top: start }}>
+      <ItemComponent item={items[index]} />
+    </div>
+  ))}
+</div>
+```
+
+Show: the measurement strategy using `ResizeObserver` per item, updating the offset map when an item's height changes, recalculating all offsets below the changed item, and batching `ResizeObserver` callbacks to avoid layout thrashing.""",
+
+"""**Debug Scenario:**
+A developer tries to improve a page's INP by wrapping an expensive `onClick` handler with `startTransition`. The INP score doesn't improve.
+
+```ts
+const handleClick = () => {
+  startTransition(() => {
+    setExpensiveState(computeValue()); // still blocks
+  });
+};
+```
+
+`computeValue()` is a synchronous 400ms calculation that runs BEFORE `startTransition`'s callback. `startTransition` only defers STATE UPDATES and their resulting renders — it doesn't defer synchronous JavaScript execution.
+
+Show: moving `computeValue()` into a Web Worker (async), using `useDeferredValue` for the result display, and the correct mental model: `startTransition` lets React interrupt renders, but JavaScript on the main thread before `setState` always blocks the interaction.""",
 
 ]
