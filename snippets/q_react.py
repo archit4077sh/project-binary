@@ -1,373 +1,470 @@
 """
-snippets/q_react.py — BATCH 4: 28 brand-new React questions
-Zero overlap with batch1, batch2, or batch3 archives.
+snippets/q_react.py — BATCH 5: 28 brand-new React questions
+Zero overlap with batch1, batch2, batch3, or batch4 archives.
 """
 
 Q_REACT = [
 
 """**Task (Code Generation):**
-Implement a `usePreviousValue<T>` hook that returns both the previous and current value plus the delta for numeric types:
+Build a `useControllable<T>` hook that supports both controlled and uncontrolled usage of a prop:
 
 ```ts
-const { previous, current, delta } = usePreviousValue(score);
-// previous: 85, current: 92, delta: +7
+// Uncontrolled (manages its own state):
+<Accordion />
+
+// Controlled (caller manages state):
+<Accordion open={isOpen} onOpenChange={setIsOpen} />
+
+// Inside Accordion:
+const [open, setOpen] = useControllable({
+  value: props.open,
+  defaultValue: false,
+  onChange: props.onOpenChange,
+});
 ```
 
-Show: the `useRef` pattern to capture the previous value synchronously during render (not in `useEffect`), the TypeScript overload that narrows `delta` to `number | null` only when `T extends number`, and a `<ScoreBadge>` component that flashes green/red based on whether `delta` is positive or negative using a CSS animation triggered by the sign change.""",
+Show: detecting controlled mode (`props.value !== undefined`), the TypeScript discriminated union for controlled vs uncontrolled prop types, a dev-mode warning when switching between controlled and uncontrolled (React's own warning pattern), and the `onChange` callback that is always called regardless of controlled/uncontrolled mode.""",
 
 """**Debug Scenario:**
-A `<DragDropContext>` (react-beautiful-dnd) around a list of items throws:
+A form using React Hook Form with Zod validation shows no errors in the UI, but `formState.isValid` is `false`. The submit button that's `disabled={!isValid}` is permanently disabled:
 
+```ts
+const { formState: { isValid, errors } } = useForm({
+  resolver: zodResolver(schema),
+  mode: 'onChange',
+});
+// errors: {} (empty) but isValid: false
 ```
-Invariant failed: provided.innerRef must be used on the drop target element
-```
 
-Only in certain conditions — specifically when the `<Droppable>` contains a virtualized list (`react-window`). The inner `ref` from `provided.innerRef` never gets attached to the actual scroll container.
+The form has a field with `z.string().transform(Number)` — Zod transforms are applied during parsing and the result fails the downstream validator. The issue: `isValid` is `false` because Zod's `output` type after transform doesn't match the form's registered field type.
 
-Show: react-beautiful-dnd's requirement that `provided.innerRef` targets the direct scroll container (not a wrapper div), the `outerRef` prop needed for `react-window` + `react-beautiful-dnd` integration, and the correct component structure for a virtualized droppable list.""",
+Show: using `z.coerce.number()` for input-to-number coercion (no transform needed), the difference between Zod `input` and `output` types with RHF, and using `zodResolver`'s `mode: 'async'` vs `mode: 'sync'`.""",
 
 """**Task (Code Generation):**
-Build a `<PermissionBoundary>` component that checks user permissions before rendering children, with role-based and attribute-based access:
+Implement a `<TreeView>` component with keyboard navigation and accessibility:
 
 ```tsx
-<PermissionBoundary
-  require="documents:write"
-  context={{ ownerId: doc.userId }}   // attribute-based: only owner can write
-  fallback={<ReadOnlyView />}
-  loading={<Spinner />}
->
-  <DocumentEditor />
-</PermissionBoundary>
+<TreeView
+  data={fileTree}
+  renderNode={(node, { isExpanded, isSelected, level }) => (
+    <FileNode node={node} expanded={isExpanded} level={level} />
+  )}
+  onSelect={(node) => openFile(node.path)}
+  multiSelect
+  defaultExpanded={['src', 'src/components']}
+/>
 ```
 
-Show: the permission engine (RBAC + ABAC hybrid), how to asynchronously resolve permissions from the server, the caching strategy so repeated `<PermissionBoundary>` checks for the same action don't make multiple requests, and the TypeScript type for the `require` prop (must be a valid permission string literal).""",
+Show: ARIA tree widget roles (`role="tree"`, `role="treeitem"`, `aria-expanded`, `aria-selected`, `aria-level`), keyboard navigation (Arrow keys to navigate, Enter/Space to select/expand, Home/End for first/last item), the flat list rendering with indentation (for virtualization compatibility), and the selection model for multi-select with Shift+click and Ctrl+click.""",
 
 """**Debug Scenario:**
-A `useReducer` hook is initialized with a lazy initializer function, but the initializer runs on every render instead of only once:
+A component uses `useId()` for generating accessible IDs but after a server-side render, the client generates different IDs causing a hydration mismatch:
 
 ```ts
-const [state, dispatch] = useReducer(reducer, props.userId, (userId) => {
-  return expensiveInit(userId); // runs every render!
-});
+const id = useId(); // Server: ':r0:' | Client: ':ra:' — mismatch!
 ```
 
-React's lazy initializer (3rd argument) should only run once on mount. The developer mistakenly put `useReducer` inside a conditional. Show: the React Rules of Hooks violation (hooks in conditionals cause reconciliation issues), the symptom pattern, moving the hook to the top level, and an alternative using `useState` with lazy init `() => expensiveInit(userId)` for comparison.""",
+Investigation reveals the component tree's insertion order differs between server and client because a CSS-in-JS library injects style tags that wrap the component differently on client.
+
+Show: why `useId()` generates IDs based on the component's position in the React tree, how any tree shape difference between server/client causes mismatch, using `suppressHydrationWarning` as a bandaid, and the real fix: ensuring the client and server render the same component tree structure (move style injection to `<head>` to avoid affecting component order).""",
 
 """**Task (Code Generation):**
-Implement a `usePortal` hook that renders children into a DOM node outside the React tree:
-
-```ts
-const { Portal, portalNode } = usePortal({
-  targetId: 'tooltip-root', // append to existing node
-  // OR:
-  createNewNode: true,       // create and append to body
-  onMount: (node) => node.classList.add('portal-active'),
-  onUnmount: (node) => node.classList.remove('portal-active'),
-});
-
-return <Portal><Tooltip position={coords}>{content}</Tooltip></Portal>;
-```
-
-Show: the `ReactDOM.createPortal` implementation inside the `Portal` component, `useLayoutEffect` for synchronous DOM operations, and why portals still propagate synthetic events through the React tree (not the DOM tree).""",
-
-"""**Debug Scenario:**
-An application wraps all pages in a `<ErrorBoundary>` that catches render errors and shows a fallback UI. After a successful error (fallback UI shown), the user clicks "Try Again" which calls `errorBoundary.reset()`. The component retries, encounters the same error, and the Error Boundary shows the fallback again — but this time without the "Try Again" button because the reset key didn't change.
-
-Show: the `key` prop pattern for resetting Error Boundary state (changing `key` force-unmounts and remounts), why `componentDidCatch` + `setState({ hasError: false })` alone doesn't retry the render, and a `<RetryErrorBoundary>` that cycles through a limited number of retries before showing a permanent error.""",
-
-"""**Task (Code Generation):**
-Build a `useIntervalTree` hook for managing overlapping time ranges (e.g., scheduling calendar events):
-
-```ts
-const { add, remove, queryRange, conflicts } = useIntervalTree<CalendarEvent>();
-
-add({ id: '1', start: 900, end: 1100, data: morningMeeting });
-add({ id: '2', start: 1000, end: 1200, data: teamSync }); // overlaps
-
-const overlap = queryRange(1000, 1100); // returns both events
-const hasConflict = conflicts('3', { start: 1030, end: 1130 }); // true
-```
-
-Show: the interval tree data structure, React state management for the tree, and a `<ConflictHighlighter>` component that visually marks conflicting events.""",
-
-"""**Debug Scenario:**
-A developer uses React's `StrictMode` and notices their `useEffect` runs twice in development. They disable `StrictMode` to prevent this. Later in production, a bug appears where a subscription listener is attached twice.
-
-The root cause: the developer's `useEffect` had a missing cleanup function — the subscription was added but never removed. `StrictMode` double-invoke was correctly revealing the bug. Show: why React's dev-mode double-invoke is a bug finder not a bug, the proper cleanup pattern for subscriptions, and the three-phase lifecycle (setup → cleanup → setup) that `StrictMode` simulates.""",
-
-"""**Task (Code Generation):**
-Implement a `useMultipleSelection` hook for complex list selection UX (similar to OS file managers):
-
-```ts
-const { selectedIds, select, deselect, toggle, selectRange, selectAll, clearAll } = useMultipleSelection(items);
-
-// Single click: select
-// Shift+click: selectRange from last selected to current
-// Ctrl+click: toggle individual without clearing others
-// Cmd+A: selectAll
-```
-
-Show: tracking the latest clicked item for range selection, the anchor-point pattern for `selectRange`, keyboard event integration, and a `getCheckboxProps(id)` helper that returns the correct `checked`/`onChange` props for each item.""",
-
-"""**Debug Scenario:**
-A `<Tooltip>` renders its content in a portal. The tooltip's `useLayoutEffect` measures the portal node's dimensions to position itself. In SSR (Next.js), `useLayoutEffect` fires a warning:
-
-```
-Warning: useLayoutEffect does nothing on the server because its effect cannot be encoded into the server renderer's output format.
-```
-
-Show: replacing `useLayoutEffect` with `useEffect` for non-blocking DOM measurements (tooltip position can update after first paint), creating a `useIsomorphicLayoutEffect` hook that is `useLayoutEffect` on client and `useEffect` on server, and when each is truly necessary vs just conventional.""",
-
-"""**Task (Code Generation):**
-Build a `createCompoundComponent` factory for compound component patterns (like Radix UI Primitives):
+Build a `useResizable` hook for creating resizable panels:
 
 ```tsx
-const Accordion = createCompoundComponent({
-  Root: AccordionRoot,
-  Item: AccordionItem,
-  Trigger: AccordionTrigger,
-  Content: AccordionContent,
+const { size, handleProps, isResizing } = useResizable({
+  direction: 'horizontal',
+  initialSize: 300,
+  min: 200,
+  max: 600,
+  onResizeStart: () => disableTextSelection(),
+  onResizeEnd: (finalSize) => saveLayoutPreference(finalSize),
 });
 
-// Usage:
-<Accordion.Root type="single">
-  <Accordion.Item value="q1">
-    <Accordion.Trigger>Question 1</Accordion.Trigger>
-    <Accordion.Content>Answer 1</Accordion.Content>
-  </Accordion.Item>
-</Accordion.Root>
-```
-
-Show: the context threading between Root → Item → Trigger/Content, the TypeScript types that make `Accordion.Trigger` outside `Accordion.Item` a type error, and forwarded refs on each sub-component.""",
-
-"""**Debug Scenario:**
-A React app using `React.lazy` for code splitting shows a full-page spinner for 3 seconds when navigating to a new route, even on fast connections. The lazy component itself loads quickly, but the Suspense fallback renders for the full duration.
-
-The issue: the lazy component has a `useEffect` that runs an async operation (fetching user data) and doesn't resolve until the data is ready. The component shows a spinner from its own `useEffect` — but since Suspense has already replaced it with the fallback, users see the fallback spinner, then the component mounts and shows another spinner.
-
-Show: using React 18's `use()` hook with a cached Promise for data loading inside the component so Suspense catches it, and eliminating the double-spinner effect.""",
-
-"""**Task (Code Generation):**
-Implement a `usePageTransition` system for animating between pages in a React Router app:
-
-```ts
-const { navigate, isLeaving, isEntering } = usePageTransition();
-
-// In component:
-<div className={cn('page', isLeaving && 'page--exit', isEntering && 'page--enter')}>
-  {children}
+<div style={{ width: size }}>
+  <PanelContent />
+  <div className="resize-handle" {...handleProps} />
 </div>
 ```
 
-Show: tracking `isLeaving` (set on navigate START, cleared when exit animation ends) and `isEntering` (set when new route mounts), `useTransition` to keep the old route in the DOM during exit animation, and CSS `@keyframes` for `--exit` and `--enter` states that produce a seamless cross-fade.""",
+Show: `mousedown`/`mousemove`/`mouseup` (and touch equivalents) on `document` during resize, calculating delta from the drag start position, clamping to min/max, cleanup of document listeners on unmount, and a `<ResizablePanel>` composite component that wraps the hook.""",
 
 """**Debug Scenario:**
-A component tree renders a list of notifications as `<NotificationItem>` components. Each `NotificationItem` has a "Dismiss" button. When the dismiss button is clicked, the item animates out and is removed from state. But the animation never plays — the item is immediately removed.
+A `<Tabs>` component's active tab indicator (a sliding underline) animates correctly on click, but when navigating via keyboard the animation starts from the wrong position — it jumps to position 0 before sliding:
 
 ```ts
-const dismiss = (id) => {
-  setItems(prev => prev.filter(n => n.id !== id)); // removes immediately
-};
+// Indicator position is calculated from the active tab's offsetLeft
+const indicatorLeft = tabs[activeIndex].current.offsetLeft;
+// On keyboard nav: focus changes before the tab element fully renders at new position
 ```
 
-The item is removed from state before the exit animation runs. Show: a two-phase dismiss pattern (1. mark as "dismissing" in state, 2. after animation completes, remove from state using `animationend` event), Framer Motion's `AnimatePresence` as the declarative alternative, and why React 18's View Transition API is the newest solution.""",
+After keyboard navigation changes `activeIndex`, React re-renders, but the tab element's `offsetLeft` is read in a `useEffect` which fires after paint — there's one frame where the indicator renders at the new ref's position in the OLD layout before the ref updates.
+
+Show: using `useLayoutEffect` instead of `useEffect` for synchronous DOM measurement before paint, the `getBoundingClientRect()` approach instead of `offsetLeft` for cross-transform compatibility, and `flushSync` to force synchronous state updates when the animation must start immediately after a state change.""",
 
 """**Task (Code Generation):**
-Build a `useFormStepper` hook for wizard-style multi-step forms:
+Implement a `useMediaSession` hook for integrating with the browser's Media Session API:
 
 ```ts
-const stepper = useFormStepper({
-  steps: ['personal', 'address', 'payment', 'review'] as const,
-  initialStep: 'personal',
-  onComplete: async (allData) => submitOrder(allData),
-});
-
-stepper.next(personalData);  // validates current step data, advances
-stepper.prev();               // goes back (keeps filled data)
-stepper.jumpTo('payment');    // only if payment step was visited before
-
-const { step, stepIndex, totalSteps, isFirst, isLast, data } = stepper;
-```
-
-Show: TypeScript literal union for `steps`, per-step data storage, back-navigation data restoration, and step validation with Zod.""",
-
-"""**Debug Scenario:**
-Two sibling components both read from a Zustand store, but one component updates a value that should also update the other. The second component renders stale data even though both use the same store.
-
-```ts
-// Component A:
-const { user, setUser } = useStore();
-
-// Component B:
-const { user } = useStore(s => ({ user: s.user })); // creates new object each render
-```
-
-Component B's selector `s => ({ user: s.user })` returns a new object reference every call — Zustand uses `Object.is` by default, so it always detects a "change" and re-renders, but conversely the "old" component sees the new reference as different from `user`. Show: using primitive selectors (`s => s.user`) or passing `shallow` as the second argument to `useStore`.""",
-
-"""**Task (Code Generation):**
-Implement a `useGlobalHotkeys` system that manages keyboard shortcuts app-wide:
-
-```ts
-useGlobalHotkeys([
-  { keys: ['meta+k', 'ctrl+k'], action: openCommandPalette, description: 'Open command palette' },
-  { keys: ['?'],                 action: openHelpModal,      description: 'Show shortcuts', scope: 'global' },
-  { keys: ['j', 'k'],           action: navigateList,        description: 'Navigate', scope: 'list-view' },
-]);
-```
-
-Show: parsing key combos into modifier + key objects, binding to `keydown` on `window`, scope management (some shortcuts only active in certain contexts), a `useHotkeyScope` hook to push/pop active scopes, and a `<HotkeyCheatSheet>` component that reads all registered hotkeys and shows a modal.""",
-
-"""**Debug Scenario:**
-A `<SearchResults>` component uses `useDeferredValue` to show stale results while new results load. But users report seeing stale results for 5-10 seconds during slow API responses — the deferred value stays stale much longer than expected.
-
-```ts
-const deferredQuery = useDeferredValue(query);
-const { data } = useQuery(['search', deferredQuery], () => search(deferredQuery));
-```
-
-`useDeferredValue` defers the value to avoid blocking urgent updates, but if there's no new render to interrupt, it provides no benefit. The query takes 5s to resolve — `useDeferredValue` only defers the UPDATE, not the fetch duration. Show: the correct use case for `useDeferredValue` (it's for rendering, not fetching), progressive disclosure with a loading indicator, and optimistic search results (show previous results with opacity 0.6 during new fetch).""",
-
-"""**Task (Code Generation):**
-Build a `<RecursiveRenderer>` component that renders a nested comment tree with collapse/expand:
-
-```tsx
-<RecursiveRenderer
-  tree={commentTree}
-  maxDepth={5}
-  renderNode={(comment, { depth, isCollapsed, toggle }) => (
-    <Comment
-      comment={comment}
-      depth={depth}
-      isCollapsed={isCollapsed}
-      onToggle={toggle}
-    />
-  )}
-/>
-```
-
-Show: the recursive component (base case at `maxDepth`), managing collapsed state for thousands of nodes efficiently (use a `Set<id>` of collapsed IDs instead of per-node state), `React.memo` on the node renderer to prevent re-renders on parent collapse/expand, and the TypeScript `TreeNode<T>` generic type.""",
-
-"""**Debug Scenario:**
-A `useWebSocket` hook connects to a WS server on mount. During React 18 concurrent mode renders, the hook mounts, starts connecting, then receives a concurrent mode interrupt — React discards the in-progress render and restarts. The WebSocket connects twice, creating two simultaneous connections.
-
-Show: React 18 Strict Mode's intentional double-mount simulation, why effects should be idempotent (connecting twice should clean up the first connection), the correct cleanup function that closes the WebSocket on re-mount, and how to use a `useRef` to hold the connection so the cleanup can reliably close it.""",
-
-"""**Task (Code Generation):**
-Implement a `<MarkdownEditor>` with live preview:
-
-```tsx
-<MarkdownEditor
-  value={content}
-  onChange={setContent}
-  height={400}
-  plugins={['tables', 'strikethrough', 'task-lists']}
-  toolbar={['bold', 'italic', 'link', 'image', 'code', 'preview']}
-/>
-```
-
-Show: a split-pane layout (editor left, preview right), `textarea` event handling for Tab key insertion and list continuation (pressing Enter on a `- list item` auto-starts `- `), markdown parsing using `marked` or `micromark`, syntax highlighting of code blocks in the preview, and real-time preview updates debounced at 150ms.""",
-
-"""**Debug Scenario:**
-A production React app logs `Warning: A future version of React will block javascript: URLs as a security precaution` for links rendered from user-generated content.
-
-The warning is from React sanitizing a rendered `<a href="javascript:void(0)">` that was used as a click handler placeholder:
-
-```tsx
-<a href="javascript:void(0)" onClick={handleClick}>Click</a>
-```
-
-Show: why `javascript:` URLs are an XSS vector, the semantic HTML replacement (`<button>` for actions, `<a href>` for actual navigation), and a `dangerouslySetInnerHTML` content sanitizer using `DOMPurify` for user-generated HTML that allows `<a>` tags but strips `javascript:` href values.""",
-
-"""**Task (Code Generation):**
-Build a `useEventQueue` hook that buffers rapid events and processes them in batches:
-
-```ts
-const { enqueue, queue, flush, isProcessing } = useEventQueue<UserAction>({
-  batchSize: 10,
-  flushInterval: 2000,    // auto-flush every 2 seconds
-  processor: async (batch) => {
-    await api.logActions(batch); // send to analytics
+useMediaSession({
+  metadata: {
+    title: track.name,
+    artist: track.artist,
+    album: track.album,
+    artwork: [{ src: track.coverUrl, sizes: '512x512', type: 'image/jpeg' }],
   },
-  onError: (err, failedBatch) => retryQueue.push(failedBatch),
+  handlers: {
+    play:           () => play(),
+    pause:          () => pause(),
+    previoustrack:  () => playPrev(),
+    nexttrack:      () => playNext(),
+    seekto:         ({ seekTime }) => seekTo(seekTime),
+    seekbackward:   ({ seekOffset = 10 }) => seekBy(-seekOffset),
+    seekforward:    ({ seekOffset = 10 }) => seekBy(seekOffset),
+  },
+  playbackState: isPlaying ? 'playing' : 'paused',
+  positionState: { duration, playbackRate: 1, position: currentTime },
 });
 ```
 
-Show: the queue state (array + useRef to avoid stale closure), the `setInterval` auto-flush that clears on unmount, the `flush()` function that processes remaining items before page unload (`beforeunload` event), concurrency control (only one batch processes at a time), and TypeScript generics for the event type.""",
+Show: `navigator.mediaSession` availability check, updating `positionState` on every `timeupdate` event, cleanup of action handlers on unmount, and the PWA `manifest.json` setup for OS media controls on lock screen.""",
 
 """**Debug Scenario:**
-A server-rendered React app uses a custom cache library that stores fetch results in a `WeakMap`. In production, memory grows unboundedly. The `WeakMap` should garbage collect entries, but it doesn't.
-
-The keys to the `WeakMap` are Response objects: `weakMap.set(response, parsedData)`. The `response` objects are kept alive in a separate `Map` used as a response cache:
-
-```ts
-const responseCache = new Map<string, Response>(); // keeps Response objects alive
-const parsedCache = new WeakMap<Response, ParsedData>(); // can't GC: Response still in Map
-```
-
-Explain `WeakMap` GC semantics (key must have no other strong references), the solution: using the URL string as the key in a regular `Map` with TTL, and when `WeakMap` is actually the right tool (private component data keyed by DOM nodes).""",
-
-"""**Task (Code Generation):**
-Implement a `<SplitText>` component that animates each word/letter individually:
+A developer discovers their React app rerenders a parent component every time a child dispatches an event, even though the parent doesn't consume the event data. The architecture uses a custom event bus via context:
 
 ```tsx
-<SplitText
-  text="Hello World"
-  mode="words"      // or "chars"
-  animateIn={{ opacity: [0, 1], y: [20, 0] }}
-  stagger={0.05}    // 50ms between each element
-  trigger="inView"  // animate when component enters viewport
+// Context value contains both `emit` and `on` functions
+const EventBusContext = createContext({ emit: () => {}, on: () => {} });
+```
+
+The context value is a fresh object on every render — all consumers re-render whenever the provider re-renders. Show: memoizing the context value with `useMemo`, separating the stable (never-changing) `emit`/`on` functions into a separate context from any stateful data, using `useRef` for the event bus internal state (doesn't trigger re-renders), and the `useReducer`/`dispatch` pattern as an alternative that provides a stable dispatch reference.""",
+
+"""**Task (Code Generation):**
+Build a `useVirtualScroll` hook from scratch for large lists:
+
+```ts
+const { virtualItems, totalHeight, scrollTo } = useVirtualScroll({
+  count: 100000,
+  itemHeight: 48,
+  containerHeight: 600,
+  overscan: 5,
+});
+
+<div style={{ height: 600, overflow: 'auto' }} ref={scrollRef}>
+  <div style={{ height: totalHeight, position: 'relative' }}>
+    {virtualItems.map(({ index, start }) => (
+      <div style={{ position: 'absolute', top: start, height: 48 }} key={index}>
+        <Row data={items[index]} />
+      </div>
+    ))}
+  </div>
+</div>
+```
+
+Show: computing the visible range from `scrollTop` and `containerHeight`, the `overscan` buffer above and below, the `scrollTo(index)` function that calls `scrollRef.current.scrollTop = index * itemHeight`, throttling scroll events with `requestAnimationFrame`, and variable-height extension using a height measurement cache.""",
+
+"""**Debug Scenario:**
+A `<DatePicker>` component built with Floating UI (Popper) positions the calendar dropdown correctly on first open, but after the user scrolls the page, the dropdown stays fixed at its initial position instead of following the trigger element:
+
+```ts
+const { floatingStyles } = useFloating({
+  placement: 'bottom-start',
+  // Missing update mechanism
+});
+```
+
+Floating UI computes position once. Scroll or resize events aren't connected. Show: adding `autoUpdate` from Floating UI (`const cleanup = autoUpdate(reference, floating, update)`) that continuously repositions on scroll/resize, returning the cleanup in `useEffect`, and the `whileElementsMounted` option in `useFloating` that handles autoUpdate lifecycle automatically.""",
+
+"""**Task (Code Generation):**
+Implement a `useFocusTrap` hook for modal accessibility:
+
+```ts
+const { containerProps, activate, deactivate } = useFocusTrap({
+  active: isModalOpen,
+  initialFocus: 'first', // or CSS selector or ref
+  returnFocus: true,      // restore focus to trigger on deactivate
+  escapeDeactivates: true,
+});
+
+<div {...containerProps} role="dialog" aria-modal="true">
+  <ModalContent />
+</div>
+```
+
+Show: collecting all focusable elements inside the container (`a[href]`, `button`, `input`, `select`, `textarea`, `[tabindex]`), Tab/Shift+Tab cycle wrapping logic, saving and restoring the focused element before/after, the `Escape` key handler, and why `aria-modal="true"` alone is insufficient without a JavaScript focus trap.""",
+
+"""**Debug Scenario:**
+A developer wraps a third-party chart component in `React.memo`. In performance testing, the chart STILL re-renders on every parent update even though none of its props changed.
+
+```tsx
+const MemoChart = React.memo(ThirdPartyChart);
+```
+
+Investigation shows `ThirdPartyChart` internally uses `useContext(ThemeContext)` — `React.memo` prevents re-renders from parent props, but NOT from context changes. The theme context changes on every render because the provider value is an inline object.
+
+Show: memoizing the context value in the provider, the difference between `React.memo` (blocks parent prop-driven re-renders) and context subscriptions (always re-render on context change), and using `useContextSelector` from `use-context-selector` to subscribe to only the relevant portion of the theme context.""",
+
+"""**Task (Code Generation):**
+Build a `<AnimatedCounter>` component that smoothly transitions between numeric values:
+
+```tsx
+<AnimatedCounter
+  value={revenue}
+  duration={1200}
+  easing="easeOutExpo"
+  formatter={(n) => `$${n.toLocaleString()}`}
+  decimals={2}
 />
+// Animates from old value to new value over 1.2 seconds
 ```
 
-Show: splitting the text into `<span>` elements (handling `mode="chars"` preserving word spacing), applying CSS custom properties `--delay` for stagger offset, `IntersectionObserver` for the `trigger="inView"` mode, `prefers-reduced-motion` fallback (no animation, immediate show), and the `aria-label` on the container to preserve screen reader experience.""",
+Show: calculating the interpolated value using `requestAnimationFrame`, the easing function library (implement `easeOutExpo`: `1 - Math.pow(2, -10 * progress)`) or using the Web Animations API, handling rapid value changes (cancel previous animation, start from current animated value), `prefers-reduced-motion` fallback (jump directly to final value), and the `useRef` for the animation frame ID cleanup.""",
 
 """**Debug Scenario:**
-A React app stores authentication state in a global Zustand store. When the user's session expires mid-session, the app shows an expired session modal. But the modal renders behind the page overlay rather than above it.
+A Next.js page with a large number of `<Link>` components to server actions freezes the browser tab when the page first loads. React DevTools shows a massive render tree in the initial commit.
 
-The modal renders in a Portal appended to `<body>`. But the page has a fullscreen overlay with `z-index: 100`. The modal's portal renders in DOM order BEFORE the overlay, which was added by a third-party cookie consent library:
+The page renders 2,000 product cards, each with a `<Link>` to the product detail page. The `<Link>` component prefetches each route on mount, creating 2,000 simultaneous prefetch requests.
 
-```
-body
-  ├── #app-root
-  │   └── (portal) #modal-root → modal (z-index: 200)
-  └── (cookie bar injects here, z-index: 999)
-```
-
-Show: why z-index alone doesn't fix cross-stacking-context issues, using a custom `#top-layer-portal` div that's always the LAST child of `body`, and the `<dialog>` element with `showModal()` as the standards-based solution that's guaranteed to appear above all other content.""",
+Show: using `<Link prefetch={false}>` on non-critical items, implementing intent-based prefetch (prefetch only on `mouseenter`), batching visible links with `IntersectionObserver` so only links near the viewport are prefetched, and the `router.prefetch` API called imperatively inside a `mouseover` handler instead of declaratively.""",
 
 """**Task (Code Generation):**
-Build a `useKeyboardNavigation` hook for custom listbox/grid keyboard navigation:
+Implement a `useCombobox` hook for an accessible autocomplete/combobox widget:
 
 ```ts
-const { activeIndex, setActiveIndex, getItemProps } = useKeyboardNavigation({
-  count: items.length,
-  orientation: 'vertical', // or 'horizontal' or 'grid'
-  columns: 3,              // for grid orientation
-  loop: true,              // wrap at edges
-  onSelect: (index) => selectItem(items[index]),
+const {
+  inputProps,
+  listboxProps,
+  getOptionProps,
+  isOpen,
+  activeIndex,
+  selectedItem,
+} = useCombobox({
+  items,
+  itemToString: (item) => item?.label ?? '',
+  onSelectedItemChange: ({ selectedItem }) => onChange(selectedItem),
+  filterItems: (items, inputValue) =>
+    items.filter(i => i.label.toLowerCase().includes(inputValue.toLowerCase())),
 });
-
-<ul role="listbox">
-  {items.map((item, i) => (
-    <li role="option" aria-selected={activeIndex === i} {...getItemProps(i)}>
-      {item.label}
-    </li>
-  ))}
-</ul>
 ```
 
-Show: arrow key handling per orientation, Home/End key support, grid navigation (up/down changes row), the `getItemProps(i)` helper returning tabIndex and event handlers, and `aria-activedescendant` vs roving tabindex (explain when to use each).""",
+Show: ARIA combobox pattern (input + listbox), keyboard handling (ArrowDown/Up navigate options, Enter selects, Escape closes, Tab transfers focus), `aria-activedescendant` pointing to the active option, and accessibility requirements from ARIA 1.2 combobox spec.""",
 
 """**Debug Scenario:**
-A React component receives a large array as `children` and passes it through to a virtualized list. React DevTools Profiler shows the component re-renders on every parent render even though `children` hasn't changed.
+A React component fetches data on a button click and stores it in local state. The component unmounts before the fetch completes (user navigates away), causing a warning:
 
-```tsx
-function VirtualList({ children }) {
-  const items = React.Children.toArray(children);
-  return <FixedSizeList itemCount={items.length}>{...}</FixedSizeList>;
+```
+Warning: Can't perform a React state update on an unmounted component.
+```
+
+```ts
+async function handleFetch() {
+  const data = await fetch('/api/data').then(r => r.json());
+  setData(data); // component already unmounted!
 }
 ```
 
-`React.Children.toArray(children)` always returns a new array with new stable keys — but the comparison is `items !== prevItems` (referential). Show: using `useMemo(() => React.Children.toArray(children), [children])` and then explaining why `children` prop comparison is shallow (array reference) making the `useMemo` irrelevant. The real fix: pass data as a typed prop instead of `children` for large virtualized lists.""",
+Show: the `AbortController` pattern to cancel the fetch on unmount, the `useEffect` cleanup that calls `controller.abort()`, an `isMounted` ref as a guard for non-fetch async operations that can't be aborted, and why React 18 removed this specific warning (it's now only a warning for `setState` on committed-then-unmounted trees).""",
+
+"""**Task (Code Generation):**
+Build a `useGestureRecognizer` hook for touch gestures:
+
+```ts
+const { gestureProps } = useGestureRecognizer({
+  onSwipeLeft:  () => nextSlide(),
+  onSwipeRight: () => prevSlide(),
+  onSwipeUp:    () => closeDrawer(),
+  onPinchZoom:  ({ scale }) => setZoom(zoom * scale),
+  onLongPress:  () => showContextMenu(),
+  swipeThreshold: 50,   // min px to qualify as swipe
+  longPressDuration: 600,
+});
+
+<div {...gestureProps}>
+  <Carousel />
+</div>
+```
+
+Show: tracking `touchstart`/`touchmove`/`touchend` coordinates, computing swipe direction and distance, two-finger distance delta for pinch zoom, `clearTimeout` on touchend to cancel long press, and `touch-action: none` CSS to prevent browser's default swipe behaviors.""",
+
+"""**Debug Scenario:**
+A React app's `<SearchInput>` uses controlled state but feels laggy — there's a visible delay between keystroke and character appearing in the input:
+
+```tsx
+<input value={query} onChange={e => setQuery(e.target.value)} />
+```
+
+The `onChange` → `setState` → re-render cycle is slow because it triggers a heavy re-render of the entire search results tree. 
+
+Show: decoupling the input state from the results state (input is uncontrolled or has its own local state, debounced value drives results), `startTransition` wrapping the results update (not the input update), replacing the controlled input with `useRef` + `defaultValue` to make the input natively responsive, and using `useDeferredValue(query)` for showing stale results while new ones load.""",
+
+"""**Task (Code Generation):**
+Implement a `useIntersectionObserverList` hook that tracks which items in a list are visible:
+
+```ts
+const { visibleIds, registerRef } = useIntersectionObserverList({
+  threshold: 0.5,     // consider visible when 50% is in viewport
+  rootMargin: '0px',
+});
+
+{items.map(item => (
+  <div key={item.id} ref={registerRef(item.id)}>
+    <ArticleCard article={item} isVisible={visibleIds.has(item.id)} />
+  </div>
+))}
+```
+
+Show: a single `IntersectionObserver` instance observing all registered elements (not one observer per item), the `Map<Element, string>` for element-to-id lookup, the `Set<string>` of currently visible IDs in state, `registerRef(id)` returning a stable `RefCallback`, and cleanup of the observer when the last element is unregistered.""",
+
+"""**Debug Scenario:**
+A developer uses `useEffect(() => { ... }, [])` (empty deps) to register a global `keydown` handler. The handler references a state variable `activeTab` from the closure, but always reads the initial value (stale closure):
+
+```ts
+const [activeTab, setActiveTab] = useState(0);
+useEffect(() => {
+  window.addEventListener('keydown', (e) => {
+    handleKeyForTab(activeTab); // always 0 — stale closure
+  });
+}, []);
+```
+
+Show: using `useRef` to hold the current `activeTab` value (updated in a separate `useEffect([activeTab])` that sets `ref.current = activeTab`), then reading `ref.current` inside the keydown handler, the alternative of using a functional updater `setActiveTab(prev => ...)` to avoid needing to read current value, and adding `activeTab` to the deps array with a corresponding `removeEventListener` cleanup.""",
+
+"""**Task (Code Generation):**
+Build a `<PrintTemplate>` system that renders a print-optimized version of a component:
+
+```tsx
+const { print, isPrinting } = usePrint({
+  documentTitle: 'Invoice #1234',
+  onBeforePrint: () => analytics.track('invoice_printed'),
+  onAfterPrint: () => setIsPrinting(false),
+});
+
+// Main view:
+<InvoiceView invoice={invoice} />
+<button onClick={print}>Print Invoice</button>
+
+// Print-only DOM:
+<PrintTemplate isPrinting={isPrinting}>
+  <InvoicePrintLayout invoice={invoice} />
+</PrintTemplate>
+```
+
+Show: CSS `@media print` for showing/hiding print-only elements, `window.print()` wrapped with React lifecycle, a Portal that injects print content into `document.body`, and the `@page` CSS at-rule for print margins and page size.""",
+
+"""**Debug Scenario:**
+A `<Tooltip>` component uses `React.cloneElement` to attach event props to its child:
+
+```tsx
+function Tooltip({ children, content }) {
+  return React.cloneElement(children, {
+    onMouseEnter: () => show(),
+    onMouseLeave: () => hide(),
+    'aria-describedby': tooltipId,
+  });
+}
+```
+
+When the child component already has an `onMouseEnter` prop, `cloneElement` overwrites it — the child's original handler is lost.
+
+Show: merging event handlers instead of overwriting them (call both the existing and the new handler), the render props pattern as an alternative to `cloneElement`, using the Slot pattern (`asChild` prop) from Radix UI, and TypeScript narrowing to ensure `children` is a single React element (not an array or string).""",
+
+"""**Task (Code Generation):**
+Implement a `useReorder` hook for drag-and-drop list reordering without external libraries:
+
+```ts
+const { items, reorderedItems, dragHandleProps, getItemProps } = useReorder({
+  initialItems: todos,
+  onReorder: (newOrder) => saveTodoOrder(newOrder),
+});
+
+{reorderedItems.map((item, i) => (
+  <li key={item.id} {...getItemProps(i)}>
+    <span {...dragHandleProps(i)}>⠿</span>
+    {item.title}
+  </li>
+))}
+```
+
+Show: tracking the dragged item index and current hover index, swapping items in a local draft copy during drag, committing to state on `dragend`, CSS `cursor: grab`/`grabbing` on the handle, and HTML5 drag-and-drop API events (`dragstart`, `dragover`, `dragend`, `drop`).""",
+
+"""**Debug Scenario:**
+A React app wraps API calls in a custom `useApi` hook. During tests with `@testing-library/react`, the component renders but never shows the loaded data — it stays in the loading state:
+
+```ts
+// useApi.ts:
+function useApi(url) {
+  const [data, setData] = useState(null);
+  useEffect(() => {
+    fetch(url).then(r => r.json()).then(setData);
+  }, [url]);
+  return data;
+}
+```
+
+Tests mock `fetch` using `jest.fn()` but `fetch` isn't globally available in JSDOM — `jest.fn()` replaces the global but `fetch` wasn't defined (JSDOM < 15 doesn't include `fetch`). The mock call never triggers.
+
+Show: using `whatwg-fetch` polyfill in test setup, or `global.fetch = jest.fn(...)` before tests, `msw` as the standard solution (intercepts at the network level regardless of how fetch is called), and `waitFor(() => expect(screen.getByText('data')).toBeInTheDocument())` to handle async rendering.""",
+
+"""**Task (Code Generation):**
+Build a `createReducerContext` factory for creating typed context/reducer pairs:
+
+```ts
+const { Provider, useDispatch, useSelector } = createReducerContext({
+  initialState: { count: 0, items: [] as string[] },
+  reducers: {
+    increment: (state) => ({ ...state, count: state.count + 1 }),
+    addItem: (state, item: string) => ({ ...state, items: [...state.items, item] }),
+    reset: () => ({ count: 0, items: [] }),
+  },
+});
+
+// Usage:
+const count = useSelector(s => s.count);
+const dispatch = useDispatch();
+dispatch.increment();
+dispatch.addItem('hello');
+```
+
+Show: the factory creating a Context, a Provider component, the typed `useDispatch` that returns an object of type-safe action creators (not a raw dispatch function), and `useSelector` with a memoized comparator to prevent unnecessary re-renders.""",
+
+"""**Debug Scenario:**
+A multi-page form stores data in React state. When the user navigates to page 2 and then uses the browser Back button to go to page 1, the form data from page 1 is reset to initial values.
+
+The form state is stored in each page component's local `useState` — navigating away unmounts the component, destroying the state. Show: lifting form state to the router level using `useLocation().state` (React Router's state passing), using a persistent global store (Zustand/Redux) for multi-step form data, or using `sessionStorage` as a persistence layer with a `useSessionStorage` hook that rehydrates on mount.""",
+
+"""**Task (Code Generation):**
+Implement a `<ContextMenu>` component that appears at the cursor position on right-click:
+
+```tsx
+<ContextMenu
+  items={[
+    { label: 'Edit', icon: <EditIcon />, onClick: handleEdit },
+    { label: 'Delete', icon: <TrashIcon />, onClick: handleDelete, destructive: true },
+    { type: 'separator' },
+    { label: 'Share', icon: <ShareIcon />, submenu: shareOptions },
+  ]}
+>
+  <div className="card">{/* Right-click on this */}</div>
+</ContextMenu>
+```
+
+Show: `onContextMenu` handler that calls `preventDefault()` and stores cursor position, rendering the menu in a Portal positioned at `{ x, y }`, closing on `click` outside or `Escape`, clipping to viewport bounds (menu doesn't go off-screen), keyboard navigation (ArrowDown/Up), and submenu hover activation with a delay (prevent accidental submenu close when moving diagonally).""",
+
+"""**Debug Scenario:**
+A developer creates a custom `useThrottle` hook and uses it in a scroll handler. Under heavy scroll events, the throttled callback sometimes fires AFTER the component unmounts, setting state on a stale component:
+
+```ts
+function useThrottle(fn, delay) {
+  const lastCall = useRef(0);
+  return useCallback((...args) => {
+    if (Date.now() - lastCall.current > delay) {
+      lastCall.current = Date.now();
+      fn(...args);
+    }
+  }, [fn, delay]);
+}
+```
+
+If `fn` is `setState`, calling it after unmount causes the old "can't update unmounted" warning. Show: using an `isMountedRef` guard inside `fn`, the modern React 18 approach (this warning is suppressed for async operations), and using `useCallback` to ensure `fn` is always the latest closure value (not stale), with `useRef` for `fn` to avoid recreating the throttle on every render.""",
 
 ]

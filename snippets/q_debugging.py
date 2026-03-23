@@ -1,356 +1,382 @@
 """
-snippets/q_debugging.py — BATCH 4: 28 brand-new Debugging questions
-Zero overlap with batch1, batch2, or batch3 archives.
+snippets/q_debugging.py — BATCH 5: 28 brand-new Debugging questions
+Zero overlap with batch1, batch2, batch3, or batch4 archives.
 """
 
 Q_DEBUGGING = [
 
 """**Debug Scenario:**
-A Next.js middleware adds `x-user-id` to request headers to pass the authenticated user ID to Server Components. But inside a Server Component, `headers().get('x-user-id')` returns `null`.
-
-Investigation shows the middleware sets the header on the `request`, but doesn't forward it using `NextResponse.next({ request: { headers: newHeaders } })` — instead it just calls `NextResponse.next()` without propagating the header mutation.
-
-Show: the correct middleware pattern for forwarding custom request headers to Server Components using `NextResponse.next({ request: { headers: requestHeaders } })`, why header mutations on the original request object don't propagate without this pattern, and reading the header safely in a Server Component.""",
-
-"""**Debug Scenario:**
-A developer adds `React.StrictMode` to their application and suddenly their form's `<input>` loses focus on every keystroke. The form was working before `StrictMode`:
+A React component conditionally renders a hook, which violates the Rules of Hooks:
 
 ```tsx
-function Form() {
-  const [fields, setFields] = useState({ name: '' });
-  const Input = () => <input value={fields.name} onChange={e => setFields({ name: e.target.value })} />;
-  return <form><Input /></form>;
-}
-```
-
-The `Input` component is defined INSIDE `Form`. `StrictMode` double-invokes renders, and every render creates a NEW `Input` function reference — React sees it as a new component type and unmounts/remounts it (losing focus).
-
-Show: moving `Input` outside the `Form` function (at module scope), why component definitions inside components are an anti-pattern (new type reference = unmount/remount on render), and `useRef` on the input as a temporary workaround.""",
-
-"""**Debug Scenario:**
-A multi-step form uses `localStorage` to persist progress. In Safari private mode, `localStorage.setItem()` throws a `QuotaExceededError` but the form crashes instead of gracefully degrading.
-
-```ts
-localStorage.setItem('form-progress', JSON.stringify(data)); // throws in Safari private
-```
-
-Safari's private mode sets `localStorage` quota to 0 bytes. The `try/catch` is missing. Show: wrapping all `localStorage` calls in a `try/catch`, creating a `safeLocalStorage` wrapper with silent failure on `QuotaExceededError`, falling back to in-memory storage when localStorage is unavailable, and a `isLocalStorageAvailable()` check using a test write/read/delete.""",
-
-"""**Debug Scenario:**
-A REST API uses `Long` (64-bit integers) for IDs. In JavaScript, integers above `Number.MAX_SAFE_INTEGER` (2^53-1) lose precision. User IDs over 9 trillion are silently corrupted:
-
-```ts
-const response = await fetch('/api/user/9007199254740993');
-const user = await response.json();
-console.log(user.id); // 9007199254740992 — precision lost!
-```
-
-`JSON.parse` converts JSON numbers to JavaScript `number` type which is a 64-bit float. Show: the server-side fix (serialize large IDs as strings in JSON), client-side: using a JSON parser that handles BigInt (`json-bigint` library), and the API contract decision — string IDs from inception to avoid this class of bug entirely.""",
-
-"""**Debug Scenario:**
-A `<Select>` component from a component library shows the placeholder text ("Select an option") even after the user selects a value. The component's `value` prop is correctly set to `'option1'`.
-
-```tsx
-<Select value={selectedOption} onChange={setSelectedOption} options={options} />
-// Shows placeholder even when selectedOption = 'option1'
-```
-
-Investigation reveals `options` is defined as inline object literals:
-
-```ts
-const options = [{ value: 'option1', label: 'One' }]; // new array every render
-```
-
-The `<Select>` uses referential equality to find the selected option (`options.find(o => o === value)` instead of `o.value === value`). It compares object identity, not value. Show: the correct comparison by `option.value`, the fix using a stable `options` reference with `useMemo`, and why inline object arrays in JSX are a maintenance footgun.""",
-
-"""**Debug Scenario:**
-A production error log shows frequent `TypeError: Cannot read properties of undefined (reading 'map')` errors from a specific React component. The component fetches data and renders a list:
-
-```tsx
-function ProductList({ categoryId }) {
-  const { data } = useQuery(['products', categoryId], () => fetchProducts(categoryId));
-  return <ul>{data.products.map(p => <li key={p.id}>{p.name}</li>)}</ul>;
-}
-```
-
-The error happens in the render phase before data is fetched (`data` is `undefined` initially). Show: optional chaining `data?.products?.map(...)`, default value `{ data: { products: [] } }`, the `isLoading` guard, and TypeScript preventing this at compile time by typing `data` as `ProductsResponse | undefined` (which requires null checking before access).""",
-
-"""**Debug Scenario:**
-A React app renders a `<Map>` component (Mapbox). When the map container is resized (responsive layout), the map tiles don't fill the new dimensions — there's a gray area at the edges.
-
-Mapbox initializes with the container's dimensions and doesn't automatically detect resize. The fix is to call `map.resize()` after the container dimensions change.
-
-Show: using `ResizeObserver` to watch the map container element and call `map.resize()` on every dimension change, the `useEffect` cleanup to disconnect the observer, and why `window.addEventListener('resize', ...)` is insufficient (catches window resize but not container resize from layout changes like sidebar collapse).""",
-
-"""**Debug Scenario:**
-A developer uses `useEffect` to synchronize a controlled `<textarea>` scroll position with a preview panel. The scroll sync works but causes an infinite loop:
-
-```ts
-useEffect(() => {
-  previewRef.current.scrollTop = textareaRef.current.scrollTop; // syncs scroll
-}, [scrollTop]); // scrollTop from useState, updated by textarea onScroll
-```
-
-Setting `previewRef.current.scrollTop` triggers the preview's scroll event, which updates `previewScrollTop` state, which re-triggers the `useEffect`... but wait, the effect uses `textareaRef.current.scrollTop` (the source). Show: why this specific pattern doesn't create an infinite loop (the effect reads from textarea, writes to preview — not the source of the state that triggered it), and demonstrate an actual scroll sync infinite loop and its fix with `isUserScrolling` ref flag.""",
-
-"""**Debug Scenario:**
-A GraphQL subscription in a React component leaks memory. The subscription isn't cancelled when the component unmounts because the cleanup function isn't returned from `useEffect`:
-
-```ts
-useEffect(() => {
-  const sub = apolloClient.subscribe({ query: PRICE_SUBSCRIPTION }).subscribe({
-    next: (data) => setPrices(data.prices),
-  });
-  // Bug: should return () => sub.unsubscribe();
-}, []);
-```
-
-Show: the correct cleanup return, how to verify the leak using Chrome DevTools Memory profiler (take heap snapshot before and after repeated mount/unmount, compare `Subscription` objects), and why React `StrictMode`'s double-invoke exposes this class of leak in development.""",
-
-"""**Debug Scenario:**
-A `useForm` hook from `react-hook-form` shows validation errors for a field that the user hasn't touched yet, on initial page load. The form shows error messages before the user has interacted:
-
-```ts
-const { formState: { errors } } = useForm({
-  resolver: zodResolver(schema),
-  mode: 'onSubmit', // ← should only validate on submit
-});
-```
-
-The issue isn't `mode` — a parent component is calling `trigger()` on mount to validate the entire form immediately (for some pre-population logic). Show: the `shouldFocusError: false` option, replacing `trigger()` on mount with `setValue` for pre-population (which doesn't trigger validation unless `shouldValidate: true` is passed), and the `touchedFields` state to conditionally show errors only for interacted fields.""",
-
-"""**Debug Scenario:**
-A React app has a custom `useFetch` hook that caches responses in a module-level `Map`. During Vitest testing, cache entries from one test pollute subsequent tests:
-
-```ts
-// Outside component — module-level:
-const cache = new Map<string, unknown>();
-
-export function useFetch<T>(url: string): { data: T | null; loading: boolean } {
-  if (cache.has(url)) return { data: cache.get(url) as T, loading: false };
-  // ...
-}
-```
-
-Module-level variables persist across test runs in the same Jest/Vitest worker. Show: clearing the cache in `afterEach` by exporting a `clearCache()` function, moving the cache inside a React Context (scoped to the app tree, reset by remounting the Provider in each test), and why module-level singletons are generally test-hostile.""",
-
-"""**Debug Scenario:**
-A `<NumberInput>` component allows the user to type decimal numbers. When the user types `1.` (with a trailing dot), the input immediately changes to `1` (the dot is lost), preventing them from typing `1.5`:
-
-```ts
-const [value, setValue] = useState<number>(0);
-<input value={value} onChange={e => setValue(Number(e.target.value))} />
-// '1.' → Number('1.') = 1 → loses the dot
-```
-
-Converting to `number` immediately drops formatting needed for mid-input states. Show: storing the value as a string internally and parsing to number only in `onBlur`, the `NaN` guard (empty or invalid input shows 0 or nothing), and a `useNumberInput` hook that exports both `displayValue: string` (for the input) and `numericValue: number | null` (for form logic).""",
-
-"""**Debug Scenario:**
-A Next.js app's `robots.txt` file blocks all crawlers on the production site. The file exists at `public/robots.txt`:
-
-```
-User-agent: *
-Disallow: /
-```
-
-This was intended for the staging environment but was shipped to production. The SEO team discovers 4 days later that Google has de-indexed the site.
-
-Show: the proper environment-aware `robots.txt` generation using Next.js `app/robots.ts` (returns `MetadataRoute.Robots`), where the Disallow path is conditionally `['/']` on staging and `[]` (allow all) on production based on `process.env.VERCEL_ENV === 'production'`, and monitoring with Google Search Console alerts for sudden drop in indexed pages.""",
-
-"""**Debug Scenario:**
-A developer uses `Array.from({ length: size }, (_, i) => i)` to generate page number arrays in a `<Pagination>` component. React DevTools shows this component re-renders on every parent state change:
-
-```tsx
-function Pagination({ currentPage, totalPages, onPageChange }) {
-  const pages = Array.from({ length: totalPages }, (_, i) => i + 1); // new array every render
-  return pages.map(p => <button onClick={() => onPageChange(p)}>{p}</button>);
-}
-```
-
-`Array.from` always creates a new array reference — but `Pagination` is wrapped in `React.memo`. `React.memo` compares `props` shallowly — `pages` is not a prop here. The real issue is `onPageChange` is an inline arrow function in the parent (new reference each render).
-
-Show: `useCallback` on `onPageChange` in the parent, and `useMemo` on `pages` if `totalPages` changes rarely.""",
-
-"""**Debug Scenario:**
-A multi-language React app uses `i18next` for translations. After switching the language from English to French, some strings update but others remain in English — specifically strings inside `React.memo`'d components.
-
-```ts
-// Memoized component:
-const PremiumBadge = React.memo(({ plan }) => {
-  const { t } = useTranslation(); // uses i18next context
-  return <span>{t('badge.premium')}</span>;
-});
-```
-
-`React.memo` compares props, and `plan` hasn't changed, so `PremiumBadge` doesn't re-render. But `t()` is a function that reads from the i18next context — the memo prevents it from seeing the language change.
-
-Show: passing `language` as a prop to `PremiumBadge` (so memo re-renders when language changes), the `i18next.on('languageChanged')` listener approach, and why `React.memo` and context consumers require careful design.""",
-
-"""**Debug Scenario:**
-A `<DataTable>` component with sorting causes rapid flickering when the user clicks a sort column header. Investigation shows:
-
-```ts
-const sortedData = data.sort((a, b) => a[sortCol] > b[sortCol] ? 1 : -1); // mutates data!
-```
-
-`Array.prototype.sort` mutates the array in place. Every re-render re-sorts the same array (which is already sorted), but React also re-renders because the array reference from state changes (the state is set to the same mutated array — same reference, no re-render... so why flicker?).
-
-Show: actually the issue is the component passes `data` to a child that animates additions/removals — mutating the array changes existing items' positions, confusing the animation. Show using `[...data].sort(...)` for an immutable sort and why array mutation is always dangerous in React's data flow.""",
-
-"""**Debug Scenario:**
-A Playwright test for a file download fails on CI:
-
-```ts
-const [download] = await Promise.all([
-  page.waitForEvent('download'),
-  page.click('button[data-testid="export"]'),
-]);
-expect(download.suggestedFilename()).toBe('report.csv');
-```
-
-The test passes locally but fails in CI with "No events of type 'download' were received before timeout." The CI environment uses Chromium in headless mode. In headless Chromium, some download behaviors require explicit handling.
-
-Show: configuring Playwright to use `acceptDownloads: true` in the browser context, the `headless: true` explicit config, setting a `downloadPath` in the browser context for CI, and checking if the website uses `Content-Disposition: attachment` header (required for download events in headless mode).""",
-
-"""**Debug Scenario:**
-A developer uses `Promise.race` to implement an API call timeout, but the losing promise (the actual fetch) continues running in the background after the timeout wins:
-
-```ts
-const result = await Promise.race([
-  fetch('/api/slow-endpoint'),
-  new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 5000)),
-]);
-```
-
-`Promise.race` resolves/rejects with the winner, but all other promises continue executing. The slow fetch still completes 30 seconds later, consuming server resources.
-
-Show: using `AbortController` to cancel the fetch when the timeout occurs:
-```ts
-const controller = new AbortController();
-const timeoutId = setTimeout(() => controller.abort(), 5000);
-const result = await fetch('/api/slow-endpoint', { signal: controller.signal });
-clearTimeout(timeoutId);
-```""",
-
-"""**Debug Scenario:**
-A React component that fetches paginated data with `useSWRInfinite` shows duplicate items when new items are inserted into the database between page loads:
-
-```ts
-const { data, size, setSize } = useSWRInfinite(
-  (index) => `/api/items?page=${index + 1}`,
-  fetcher
-);
-```
-
-When page 1 is loaded with items 1-10, then a new item is inserted at position 1, loading page 2 returns items 11-20 but item 11 was item 10 before the insertion — so item 10 appears on both pages.
-
-Show: switching to cursor-based pagination (`/api/items?after=lastId`), the SWR key function using `data?.[data.length - 1]?.cursor`, and de-duplicating items client-side using a `Map` by ID as a safety net.""",
-
-"""**Debug Scenario:**
-A React component uses `addEventListener` in a `useEffect` to detect clicks outside a dropdown. After the component re-renders, there are two event listeners attached (one from the initial mount, one from the re-render):
-
-```ts
-useEffect(() => {
-  document.addEventListener('click', handleClose);
-  // Missing return cleanup!
-}, [isOpen]); // Re-attaches every time isOpen changes
-```
-
-Each time `isOpen` changes, a new listener is added without removing the previous one. Show: the correct cleanup function (`return () => document.removeEventListener('click', handleClose)`), running the `linter` rule `react-hooks/exhaustive-deps` which catches this, and the alternative using an `AbortController` signal for event listener cleanup.""",
-
-"""**Debug Scenario:**
-A Next.js app's API route returns a large JSON response (8MB). Users on mobile experience 30+ second load times for a dashboard page that calls this endpoint.
-
-Investigation reveals the endpoint fetches 50,000 rows from the database and returns all of them. The dashboard only renders the first 20 visible rows.
-
-Show: adding server-side pagination (`LIMIT 20 OFFSET $page * 20`), cursor-based pagination for infinite scroll, response compression (`Content-Encoding: gzip` — Next.js Route Handlers compress by default but confirm), and client-side data virtualization so that even when all data IS loaded, only visible rows are in the DOM.""",
-
-"""**Debug Scenario:**
-A `<Toast>` notification system renders toasts via a React context. When multiple toasts appear simultaneously (5+ in under a second), some disappear instantly while others stay visible for the wrong duration.
-
-```ts
-const [toasts, setToasts] = useState<Toast[]>([]);
-const addToast = (msg, duration = 3000) => {
-  setToasts(prev => [...prev, { id: Date.now(), msg, duration }]);
-  setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), duration); // closure bug
-};
-```
-
-`id` in the `setTimeout` closure is captured from the outer function but `Date.now()` is called at different times — however the real bug is `id` isn't defined in scope at the time `setTimeout` is set. Show: the closure fix using the toast ID consistently, and `useRef` to maintain a stable ID counter instead of `Date.now()` (to avoid collisions when multiple toasts are added in the same millisecond).""",
-
-"""**Debug Scenario:**
-A developer reports that Redux `dispatch` inside a `useEffect` causes a state update loop:
-
-```ts
-useEffect(() => {
-  if (data && !initialized) {
-    dispatch(initializeState(data));
+function UserProfile({ isLoggedIn }) {
+  if (!isLoggedIn) {
+    return <LoginPrompt />;  // early return BEFORE hooks
   }
-}, [data, initialized, dispatch]);
+  const user = useCurrentUser(); // called conditionally!
+  const { data } = useQuery(['user', user.id], fetchUser);
+  return <Profile user={data} />;
+}
 ```
 
-`dispatch` is stable (never changes in Redux — same reference throughout app lifetime). `data` might change. `initialized` changes after dispatch fires (from `false` to `true`). The loop happens if `initialized` doesn't actually flip to `true` — perhaps the `initialized` reducer has a bug.
-
-Show: adding a `console.log` inside the effect to count invocations, using Redux DevTools time-travel to inspect `initialized` value after each dispatch, and the reducer bug (missing `return { ...state, initialized: true }`).""",
+Hooks must be called in the same order on every render. The conditional early return changes the hook call order. Show: restructuring to hoist ALL hooks before any conditional `return`, or splitting into two components (`<AuthenticatedProfile>` contains all hooks, `<UserProfile>` decides which to render), and the ESLint rule `react-hooks/rules-of-hooks` that catches this pattern at development time.""",
 
 """**Debug Scenario:**
-A CSS-in-JS library (`@emotion/react`) generates a class name collision in production between two unrelated components. Both end up with class `css-abc123`.
-
-Class names in Emotion are hashes of the CSS content. If two completely different components have identical CSS content (e.g., both are `color: red; font-size: 14px;`), they get the same hash and share the class — this is INTENTIONAL deduplication, not a bug.
-
-Show why this is generally fine (same styles = same class = smaller DOM), the case where it causes problems (component-specific selectors like `.parent .css-abc123:first-child` that rely on class uniqueness), and using `label` in Emotion's `css` prop (`css({ label: 'my-button', color: 'red' })`) to add a component-specific prefix to the generated class name.""",
-
-"""**Debug Scenario:**
-A TypeScript error appears only in `tsc --strict` mode but not in regular `tsc`:
+A developer uses `Object.assign({}, defaultConfig, userConfig)` to merge configs, but deeply nested properties are overwritten instead of merged:
 
 ```ts
-function getUser(id: string) {
-  return users.find(u => u.id === id); // type: User | undefined (strict)
-  //                                             ^^^^^^^^^^ without strict: User
-}
+const defaultConfig = { server: { port: 3000, timeout: 5000 }, db: { poolSize: 10 } };
+const userConfig    = { server: { port: 8080 } };
 
-getUser('1').name; // Error in strict, OK without strict
+const config = Object.assign({}, defaultConfig, userConfig);
+// Result: { server: { port: 8080 }, db: { poolSize: 10 } }
+//         ^^^^^^^^^^^^^^^^^^^^^^^^
+// server.timeout is lost! Object.assign is shallow.
 ```
 
-Without `strictNullChecks`, TypeScript doesn't track `undefined` in union types — `find` returns `User` instead of `User | undefined`. Show: enabling `strict: true` in `tsconfig.json` (enables `strictNullChecks` + 7 other checks), fixing the callers with optional chaining `getUser('1')?.name`, and why migrating incrementally from non-strict to strict uses `// @ts-strict-ignore` comments (with a plan to remove them).""",
+Show: deep merge using `JSON.parse(JSON.stringify(base))` (only for JSON-safe configs), recursive `deepMerge(target, source)` that recursively merges nested objects, `lodash.merge` as a well-tested solution, and the structural difference between lodash `merge` (mutates target) and lodash `mergeWith` (custom merger per field).""",
 
 """**Debug Scenario:**
-A developer implements `useCountdown(targetDate)` by storing `remainingSeconds` in `useState` and decrementing it with `setInterval`. The countdown drifts — after 1 hour, it's 3–5 seconds behind.
+A React app fails with "Objects are not valid as a React child" but the component looks correct:
+
+```tsx
+function ErrorDisplay({ error }) {
+  return <div>{error}</div>;  // error is an Error object, not a string
+}
+
+<ErrorDisplay error={new Error('Not found')} />
+```
+
+React can render strings, numbers, booleans, arrays, and React elements — but NOT plain objects (including `Error` instances). Show: rendering `error.message` instead of the entire error object, adding a fallback `String(error)` for unknown error shapes, the TypeScript fix (type `error` as `string | Error` and narrow before rendering), and a generic `<ErrorDisplay error: unknown>` component that handles all error shapes gracefully.""",
+
+"""**Debug Scenario:**
+A form validation function uses `async/await` inside a loop but the validations aren't running in parallel:
+
+```ts
+async function validateAll(fields: Field[]) {
+  const errors: ValidationError[] = [];
+  for (const field of fields) {
+    const error = await validateField(field); // sequential — each waits for the last
+    if (error) errors.push(error);
+  }
+  return errors;
+}
+// Time: sum of all validation times (e.g., 5 × 200ms = 1000ms)
+```
+
+Show: replacing the sequential `for...await` loop with `Promise.all(fields.map(validateField))` for concurrent validation (total time ≈ max single validation time, ~200ms), `Promise.allSettled` if some validations should not cancel others on failure, and error filtering from the settled results.""",
+
+"""**Debug Scenario:**
+A `useEffect` in a custom hook has a missing dependency that causes a stale callback. The developer added the dep to the array but now ESLint warns about the `useCallback` in the parent:
+
+```tsx
+// Custom hook:
+function useSearch(onResults: (data: Result[]) => void) {
+  useEffect(() => {
+    fetchResults().then(onResults);
+  }, [onResults]); // onResults added per ESLint warning
+}
+
+// Parent component:
+<SearchWidget onResults={handleResults} />
+// handleResults is a new function reference every render
+// → triggers useSearch's effect on every parent render
+```
+
+Show: the root cause (non-memoized callback in parent), wrapping `handleResults` with `useCallback` in the parent, and the alternative of storing `onResults` in a `useRef` inside the hook (the ref holds the latest callback, the effect only runs on the relevant deps change, not the callback).""",
+
+"""**Debug Scenario:**
+A developer uses `window.open(url, '_blank')` inside an asynchronous event handler. Modern browsers block this as a popup:
+
+```tsx
+async function handleExport() {
+  const url = await generateExportUrl(); // async operation
+  window.open(url, '_blank');            // popup blocked!
+}
+<button onClick={handleExport}>Export</button>
+```
+
+Browsers only allow `window.open` when called synchronously within a user gesture handler. The `await` breaks the synchronous execution chain. Show: opening the window synchronously (before `await`) and then assigning `window.location.href` once the URL is ready, or creating an `<a target="_blank">` element and programmatically clicking it, or navigating within the same window instead of a popup.""",
+
+"""**Debug Scenario:**
+A developer tests a React component with `@testing-library/react` using `screen.findByText` but the test times out:
+
+```ts
+const heading = await screen.findByText('Welcome back');
+// Timeout: Unable to find an element with text 'Welcome back'
+```
+
+`findByText` uses exact matching by default. The rendered text is "Welcome back, Alice!" — the full string doesn't match the search text "Welcome back" exactly. Show: using `{ exact: false }` option (`screen.findByText('Welcome back', { exact: false })`), using a regex (`/Welcome back/`), `findByRole('heading', { name: /welcome back/i })` for more semantically meaningful queries, and `getByText` vs `findByText` (async) vs `queryByText` (returns null instead of throwing).""",
+
+"""**Debug Scenario:**
+A developer uses `React.createPortal` to render a modal inside `document.body`, but the modal's click events bubble up to a parent component's `onClick` handler:
+
+```tsx
+function Page() {
+  return (
+    <div onClick={() => console.log('Page clicked!')}>
+      <Modal />  {/* Rendered via portal into document.body */}
+    </div>
+  );
+}
+```
+
+Portal children are OUTSIDE the DOM hierarchy of the parent, but React's synthetic events STILL bubble through the React component tree (not the DOM tree). Clicking inside the modal triggers the `Page`'s `onClick`. Show: calling `e.stopPropagation()` in the modal's root `div`, the distinction between DOM event bubbling and React synthetic event bubbling for portals, and checking `e.target` in the parent's handler to ignore events originating from the modal.""",
+
+"""**Debug Scenario:**
+A TypeScript API handler maps a Prisma query result directly to the response, accidentally exposing `passwordHash` and `twoFactorSecret` to the client:
+
+```ts
+async function getUserHandler(req, res) {
+  const user = await prisma.user.findUnique({ where: { id: req.params.id } });
+  res.json(user); // exposes ALL fields including sensitive ones!
+}
+```
+
+Show: using Prisma's `select` to explicitly list safe fields (`select: { id: true, name: true, email: true }`), a `toPublicUser(user: User): PublicUser` mapping function that picks only safe fields, TypeScript's `Omit<User, 'passwordHash' | 'twoFactorSecret'>` type to enforce exclusion at compile time, and an ESLint custom rule that flags `res.json(prismaResult)` without a field selection.""",
+
+"""**Debug Scenario:**
+A component renders a list with duplicate `key` props, causing React to silently skip rendering some items:
+
+```tsx
+{products.map((product) => (
+  <ProductCard key={product.category} product={product} />
+))}
+// Multiple products in the same category → duplicate keys
+```
+
+React uses keys to identify elements for reconciliation. Duplicate keys cause React to treat them as the same element — some items may not render, or update incorrectly. Show: using a truly unique key (`product.id` or `product.sku`), generating a unique key from multiple fields (`key={${product.category}-${product.id}}`), and why array index as key is problematic only when the list can be reordered or filtered (stable lists where key-as-index is acceptable).""",
+
+"""**Debug Scenario:**
+A Next.js API route that accepts multipart form data (file uploads) throws `SyntaxError: Unexpected token` because Next.js tries to parse the body as JSON by default:
+
+```ts
+export async function POST(request: Request) {
+  const body = await request.json(); // fails for multipart!
+}
+```
+
+`request.json()` calls `JSON.parse` on the body, which fails for `multipart/form-data` content. Show: using `await request.formData()` for multipart forms in the Next.js App Router, accessing uploaded files with `formData.get('file') as File`, reading file contents with `file.arrayBuffer()`, and setting the Next.js route config `export const config = { api: { bodyParser: false } }` for Pages Router routes that handle multipart data.""",
+
+"""**Debug Scenario:**
+A developer uses `useCallback` to memoize a function, but the memoized function still changes reference every render:
+
+```ts
+const handleClick = useCallback(() => {
+  console.log(count);
+}, [count]);
+
+// handleClick reference changes every time count changes → re-renders children
+```
+
+The developer expected `useCallback` to return a stable function, but `count` changes frequently. The function MUST change when `count` changes to capture the latest value. Show: the core misunderstanding — `useCallback` memoizes based on deps, which is correct here (the function needs the current `count`). The solution is redesigning so the child only receives stable callbacks, using `useRef` to access current `count` inside a stable callback, and `startTransition` to defer the re-renders triggered by count changes.""",
+
+"""**Debug Scenario:**
+A React app uses `Date.now()` for unique IDs in client-side rendered components. After a server-side render (SSR), the IDs differ between server and client causing hydration errors:
+
+```ts
+const [uniqueId] = useState(() => `id-${Date.now()}`);
+// Server: id-1703234567890 | Client: id-1703234567912 — hydration mismatch!
+```
+
+`Date.now()` returns different values on server and client (millisecond difference). Show: using React's `useId()` hook instead (deterministic, SSR-safe), or generating the ID with a seeded counter that resets to the same value on server and client, and the `useEffect` workaround for rare cases: initialize with `null` on server, set the real ID in `useEffect` (client-only).""",
+
+"""**Debug Scenario:**
+A floating point precision bug causes a monetary calculation to fail:
+
+```ts
+const price = 1.1;
+const tax   = 0.1;
+const total = price + tax;
+console.log(total);          // 1.2000000000000002
+console.log(total === 1.2);  // false!
+```
+
+JavaScript uses IEEE 754 double-precision floating point — binary fractions can't represent all decimals exactly. Show: multiplying to integers before arithmetic (`Math.round((price + tax) * 100) / 100`), using `Number.EPSILON` for comparison (`Math.abs(total - 1.2) < Number.EPSILON`), using the `Decimal.js` or `big.js` library for arbitrary precision, and why monetary values should be stored as integers (cents) in both the database and application.""",
+
+"""**Debug Scenario:**
+A Zustand store action uses `get()` to read state, but reads stale values when multiple actions are dispatched in rapid succession:
+
+```ts
+const addItem = () => set(state => ({
+  items: [...state.items, newItem],
+  total: get().items.reduce((sum, i) => sum + i.price, 0), // reads stale state
+}));
+```
+
+Inside `set(fn)`, using `get()` reads the CURRENT stored state (before this update is applied), not the updated state from `fn`. Show: computing `total` from the updated `items` inside the `set` callback:
+
+```ts
+set(state => {
+  const items = [...state.items, newItem];
+  return { items, total: items.reduce((sum, i) => sum + i.price, 0) };
+});
+```
+
+And using `immer` middleware to avoid returning a new object (mutate the draft directly).""",
+
+"""**Debug Scenario:**
+A developer adds `async` to a function used as a React event handler, and now errors are not caught by the component's error boundary:
+
+```tsx
+<form onSubmit={async (e) => {
+  e.preventDefault();
+  await submitForm(data); // throws, but error boundary doesn't catch it
+}}>
+```
+
+Error boundaries only catch errors thrown during React's rendering phase — not inside event handlers, and not inside async functions. Show: wrapping the async handler in `try/catch` with `setState({ error })`, using a `useErrorHandler()` hook from `react-error-boundary` that internally calls `setState` to trigger the boundary, and the correct mix of boundary + handler-level error handling.""",
+
+"""**Debug Scenario:**
+A CSS transition on a React component doesn't play when the component first mounts — only on subsequent state changes:
+
+```tsx
+function Alert({ type }) {
+  return (
+    <div
+      className={`alert alert-${type}`}  // type changes: 'info' → 'error'
+      style={{ transition: 'background 0.3s' }}
+    >
+      Notification
+    </div>
+  );
+}
+```
+
+CSS transitions work when a property CHANGES between two states. On mount, there's no "previous" state to transition from — the browser applies the initial value instantly. Show: adding a brief `setTimeout(addActiveClass, 10)` after mount to trigger the transition, using CSS `animation` instead of `transition` for enter animations, the Framer Motion `<motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>` approach, and the React ecosystem `react-transition-group` `<CSSTransition>` component.""",
+
+"""**Debug Scenario:**
+A developer receives a `CORS` error when making a fetch request from `localhost:3000` to `localhost:4000`:
+
+```
+Access to fetch at 'http://localhost:4000/api/data' from origin 'http://localhost:3000' 
+has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present
+```
+
+Even `localhost` to `localhost` on different ports is cross-origin. Show: adding `cors` middleware on the Express server (port 4000) with `origin: 'http://localhost:3000'`, why `mode: 'no-cors'` in fetch is NOT the fix (it makes the response opaque — unreadable), the Vite dev server `proxy` config for avoiding CORS in development, and handling the `OPTIONS` preflight request (CORS preflight for non-simple requests).""",
+
+"""**Debug Scenario:**
+A React `useReducer` action mutates the state object and the component doesn't re-render:
+
+```ts
+function reducer(state, action) {
+  switch(action.type) {
+    case 'ADD_ITEM':
+      state.items.push(action.item); // mutates state!
+      return state;  // returns same reference
+  }
+}
+```
+
+React compares state by reference. Returning the same (mutated) object reference means React sees no state change and skips re-render. Show: the immutable update (`return { ...state, items: [...state.items, action.item] }`), using Immer (`produce(state, draft => { draft.items.push(action.item) })`) for ergonomic immutable updates, and why Redux Toolkit uses `createSlice` with Immer to prevent this mistake.""",
+
+"""**Debug Scenario:**
+A developer uses `Array.sort()` to sort a list of products by price, but the sort order is incorrect for 3-digit prices:
+
+```ts
+const prices = [10, 100, 2, 30, 200];
+prices.sort(); // [10, 100, 2, 200, 30] — wrong! (lexicographic)
+```
+
+Without a comparator, `Array.sort()` converts elements to strings and sorts lexicographically: `'10' < '100' < '2'`. Show: passing a numeric comparator `(a, b) => a - b`, the `Intl.Collator` for locale-aware string sorting, and chained sort for multiple criteria `(a, b) => a.price - b.price || a.name.localeCompare(b.name)`.""",
+
+"""**Debug Scenario:**
+A React app stores the current user in localStorage and uses `JSON.parse(localStorage.getItem('user'))` in the initial state. On first load (no stored user), `JSON.parse(null)` returns `null` — but subsequent code expects a `User` object, causing TypeScript-ignored runtime errors:
+
+```ts
+const [user, setUser] = useState<User>(JSON.parse(localStorage.getItem('user')!));
+// On first load: user is null but type says User — TypeScript non-null assertion bypasses safety
+```
+
+Show: proper null handling (`JSON.parse(localStorage.getItem('user') ?? 'null') as User | null`), initializing with `null` as the legitimate state type (`useState<User | null>(null)`), a `useLocalStorage<T>(key, defaultValue)` hook that handles JSON parsing and null defaults, and Zod schema validation of the stored user object (in case it was corrupted or from an old schema version).""",
+
+"""**Debug Scenario:**
+A developer dispatches multiple Redux actions in succession inside a `useEffect`, causing multiple re-renders:
 
 ```ts
 useEffect(() => {
-  const id = setInterval(() => {
-    setRemaining(prev => prev - 1);
-  }, 1000);
-  return () => clearInterval(id);
+  dispatch(setLoading(true));
+  dispatch(setUser(null));
+  dispatch(clearCart());
+  dispatch(setLoading(false));
+  // 4 separate store updates → 4 re-renders
 }, []);
 ```
 
-`setInterval` fires at approximately 1000ms but can drift due to browser throttling, tab inactivity, and JavaScript event loop delays. Over time, small delays accumulate.
-
-Show: fixing the drift by computing `remaining` from `targetDate - Date.now()` on each tick (absolute time reference, not relative decrement), why this is immune to drift, and `requestAnimationFrame` as an alternative for smoother visual countdown displays.""",
+Show: using Redux Toolkit's `createAction` actions inside a single `dispatch` with a combined action (`dispatch(resetSession())` where `resetSession` handles setting loading, user, cart, etc. in one reducer call), React 18's automatic batching (all dispatches in a `useEffect` ARE already batched in React 18 with `createRoot` — so this may not actually be 4 re-renders), and `redux-batch` middleware for older Redux setups.""",
 
 """**Debug Scenario:**
-A React apps uses `createContext` for a feature flags context. A `<FeatureFlagsProvider>` is at the root. When Cypress E2E tests run, feature flags show their defaults instead of test-specific values.
+A streaming API endpoint sends server-sent events (SSE) but the browser closes the connection after 30 seconds. Users report the live feed "dying" after exactly 30 seconds regardless of activity:
 
-```tsx
-// Test wants new-checkout=true, but sees false
-cy.visit('/checkout');
+```ts
+// Server:
+res.write(`data: ${JSON.stringify(event)}\n\n`);
+// Browser: EventSource disconnects at exactly 30s
 ```
 
-Cypress tests hit the real app which reads flags from the server. No mechanism exists to override flags in tests. Show: adding a `?flags=new-checkout:true` URL parameter that the `<FeatureFlagsProvider>` reads (for testing only, stripped in production), an MSW handler that returns specific flag values based on a `cy.intercept`, and the `window.__TEST_FLAGS__` injection approach via `cy.window()` for non-API flag overrides.""",
+The disconnect isn't from the browser — it's likely a load balancer, reverse proxy (nginx/Cloudflare), or CDN with a hardcoded 30-second timeout for idle connections. Show: configuring nginx `proxy_read_timeout` to a longer value, sending a SSE heartbeat comment (`": keepalive\n\n"`) every 15 seconds to prevent idle timeout, and adding `EventSource` reconnect logic with exponential backoff (`source.onerror = () => setTimeout(reconnect, delay)`).""",
 
 """**Debug Scenario:**
-A production React app shows the error "Maximum update depth exceeded" triggered by a `useEffect` that depends on an object prop:
+A React component tree throws an unrecoverable error every time it tries to render a video player. The error boundary catches it, but when the user clicks "Try Again" (which calls `reset()`), the component re-crashes immediately:
+
+```tsx
+function VideoPage() {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  useEffect(() => {
+    videoRef.current!.src = getVideoUrl(); // getVideoUrl() throws
+  }, []);
+  return <video ref={videoRef} />;
+}
+```
+
+`getVideoUrl()` always throws (bad config). Clicking Reset re-mounts `VideoPage` which triggers the same `useEffect` which throws again. Show: the error boundary `reset()` + props key trick (`key={retryKey}` that increments to force a fresh mount), fixing the root cause (null checking `getVideoUrl()`), and the `react-error-boundary` `fallbackRender` pattern with props passed to the fallback for context.""",
+
+"""**Debug Scenario:**
+A developer uses `element.addEventListener('click', handler, { once: true })` expecting the handler to fire once and auto-remove. But in React, the component re-renders and re-runs the `useEffect` that adds the listener again:
 
 ```ts
 useEffect(() => {
-  applyConfig(config);
-}, [config]); // config is { theme: 'dark', lang: 'en' } — new object each render
+  element.addEventListener('click', handleClick, { once: true });
+  // No cleanup! After handleClick fires, React re-renders → useEffect re-runs → listener added again
+}, [someState]);
 ```
 
-The parent renders a new `config` object literal each time. `useEffect` compares dependencies with `Object.is` — a new object reference each render causes the effect to re-run infinitely.
+`{ once: true }` removes the listener after ONE fire, but the `useEffect` runs again (due to `someState` dep change) and re-adds it — creating a new listener. Show: adding a `return () => element.removeEventListener('click', handleClick)` cleanup (even with `{ once }`, cleanup handles the case where the component unmounts before the click), and whether `{ once: true }` is even needed (the cleanup handles removal).""",
 
-Show: the developer options — (1) destructure the individual primitive values as dependencies (`[config.theme, config.lang]`), (2) stabilize the object in the parent with `useMemo`, (3) use the `useDeepCompareEffect` custom hook for complex object deps (only runs when deep equality changes), and why option 3 has hidden costs (deep comparison on every render).""",
+"""**Debug Scenario:**
+A developer implements infinite scroll using `IntersectionObserver` but the observer fires immediately on mount — before the user scrolls — causing a premature data fetch:
+
+```ts
+useEffect(() => {
+  const observer = new IntersectionObserver(([entry]) => {
+    if (entry.isIntersecting) loadMore(); // fires immediately!
+  });
+  observer.observe(sentinelRef.current);
+}, []);
+```
+
+`IntersectionObserver` fires its callback synchronously on the first observation, checking if the element is already in the viewport. The sentinel element IS in the viewport on initial mount when the list is short. Show: skipping the first callback invocation with a `hasInitialized` ref, setting `rootMargin: '200px'` to load earlier (before reaching the sentinel), and threshold configuration to control precisely when `isIntersecting` becomes `true`.""",
+
+"""**Debug Scenario:**
+A developer mistakenly uses `JSON.stringify` to deep-compare two objects in a performance-critical render path:
+
+```ts
+function hasChanged(prev: Config, next: Config): boolean {
+  return JSON.stringify(prev) !== JSON.stringify(next); // slow for large objects
+}
+```
+
+`JSON.stringify` serializes the entire object on every call — O(n) in object size. For a 5MB config object, this is called on every render. Show: structural comparison using a fast `shallowEqual` for the top level (if shallow equals, skip), only deep-comparing on shallow difference, using `fast-deep-equal` npm package for reliable deep comparison without serialization overhead, and the specific case where JSON.stringify IS OK (small, guaranteed JSON-safe objects).""",
+
+"""**Debug Scenario:**
+A developer uses `Array.prototype.reduce` to transform an array but gets `undefined` as the result when the array is empty:
+
+```ts
+const items: number[] = [];
+const total = items.reduce((acc, n) => acc + n);
+// TypeError: Reduce of empty array with no initial value
+```
+
+`Array.reduce` without an initial value throws on empty arrays. With an initial value, it works correctly even on empty arrays. Show: always providing an explicit initial value (`items.reduce((acc, n) => acc + n, 0)`), the TypeScript type signature difference (`reduce<U>(..., initialValue: U): U` vs `reduce(...): T`), and common reduce gotchas: object accumulator mutation vs returning a new object, and accumulator type mismatch.""",
 
 ]

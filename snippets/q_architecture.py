@@ -1,411 +1,485 @@
 """
-snippets/q_architecture.py — BATCH 4: 28 brand-new Architecture questions
-Zero overlap with batch1, batch2, or batch3 archives.
+snippets/q_architecture.py — BATCH 5: 28 brand-new Architecture questions
+Zero overlap with batch1, batch2, batch3, or batch4 archives.
 """
 
 Q_ARCHITECTURE = [
 
 """**Task (Code Generation):**
-Implement a `PluginSystem<Hooks>` that allows third-party code to extend application functionality:
+Implement a `createBFFClient<Schema>` (Backend for Frontend) that provides a typed data layer:
 
 ```ts
-const app = createApp<AppHooks>({
-  beforeRender: { type: 'waterfall' },   // each plugin transforms the value
-  afterFetch:   { type: 'parallel' },    // all plugins run concurrently
-  onError:      { type: 'sequential' },  // plugins run in order, can short-circuit
-});
-
-app.use(authPlugin);
-app.use(loggingPlugin);
-
-const result = await app.call('beforeRender', initialProps);
-```
-
-Show: the `waterfall` (chain-transform), `parallel` (Promise.all), and `sequential` (abort on false return) hook types, TypeScript type safety for hook arguments per hook name, and plugin registration with optional `priority` ordering.""",
-
-"""**Debug Scenario:**
-A React SPA has a 2MB main bundle. Webpack Bundle Analyzer shows the `moment` + `moment-timezone` combo (500KB), `lodash` (70KB via `import _ from 'lodash'`), and `react-icons` (200KB of unused icons).
-
-Design the dependency audit and refactoring plan:
-1. Replace `moment` with `date-fns` (tree-shakeable) + `date-fns-tz` for timezone support
-2. Replace `import _ from 'lodash'` with `import { debounce } from 'lodash-es'` (tree-shakeable)
-3. Replace `import { FaUser, FaHome } from 'react-icons/fa'` with SVG files imported directly
-
-Show: the Webpack config `alias` for moment replacement, the ESLint rule that bans full lodash import, and expected bundle size reduction.""",
-
-"""**Task (Code Generation):**
-Build a `createEventBus<Events>` for decoupled cross-module communication:
-
-```ts
-type AppEvents = {
-  'cart:item-added':   { productId: string; quantity: number };
-  'user:logged-out':   void;
-  'payment:completed': { orderId: string; total: number };
-};
-
-const bus = createEventBus<AppEvents>();
-
-// Analytics module subscribes:
-bus.subscribe('payment:completed', ({ orderId, total }) => {
-  analytics.track('purchase', { orderId, revenue: total });
-});
-
-// Checkout module publishes:
-bus.publish('payment:completed', { orderId: 'ORD-1', total: 99.99 });
-```
-
-Show: the TypeScript inference that types the payload from the event name, wildcard subscriptions `bus.subscribe('*', handler)`, the `once` variant, unsubscribe logic, and replay mode (new subscribers receive the last N published events).""",
-
-"""**Debug Scenario:**
-A company uses a custom i18n solution where translation keys are string literals:
-
-```ts
-t('dashboard.header.title')       // ✓ exists in translations
-t('dashboard.header.subtitle123') // ✓ TypeScript allows but doesn't exist — "" at runtime
-```
-
-The team has 200 missing translation key bugs because TypeScript doesn't validate the keys. Design a type-safe i18n system where accessing a missing key is a TypeScript compile error:
-
-1. Import translations as `const` assertion: `import translations from './en.json' as const`
-2. Generate a `DotPath<typeof translations>` type of all valid dot-notation keys
-3. `t(key: DotPath<typeof translations>): string`
-
-Show the `DotPath<T>` recursive template literal type.""",
-
-"""**Task (Code Generation):**
-Implement a `createMockServer` for integration testing that simulates network delays and failures:
-
-```ts
-const server = createMockServer({
-  latency: { min: 10, max: 50 },    // random realistic delay
-  errorRate: 0.05,                    // 5% of requests fail
-  handlers: {
-    'GET /api/users':     { status: 200, body: mockUsers },
-    'POST /api/users':    { status: 201, handler: (req) => ({ ...req.body, id: uuid() }) },
-    'DELETE /api/users/:id': { status: 204, body: null },
+const bff = createBFFClient({
+  baseUrl: '/api/bff',
+  schema: {
+    'dashboard.overview':  { input: { userId: z.string() }, output: DashboardOverviewSchema },
+    'products.search':     { input: SearchFiltersSchema, output: z.array(ProductSchema) },
+    'orders.create':       { input: CreateOrderSchema, output: OrderConfirmationSchema },
   },
 });
 
-// Scenario overrides for specific tests:
-server.scenario('database-down', {
-  'GET /api/users': { status: 503, body: { error: 'Service Unavailable' } },
-});
+// Fully typed:
+const overview = await bff.call('dashboard.overview', { userId: '123' });
+// overview: DashboardOverview
 ```
 
-Show: the server factory, random latency simulation, scenario management (overrides for specific test paths), and integration with the test lifecycle.""",
+Show: the BFF server-side aggregation layer (single endpoint that orchestrates multiple microservice calls in parallel), the typed client that validates input/output with Zod, request deduplication (two concurrent `dashboard.overview` calls with same args → one HTTP request), and the `trpc`-style end-to-end type inference.""",
 
 """**Debug Scenario:**
-A React micro-frontend architecture has 3 teams deploying independently. Team A's `<Header>` component (deployed as a Webpack Module Federation remote) logs a React version mismatch warning after Team B updated their host to React 18.3, while Team A's remote is React 18.2.
+A React app using React Query has a memory leak in production. Heap snapshots show `QueryObserver` objects accumulating over time — hundreds of thousands of instances.
 
-Furthermore, both teams use their own `react-router-dom` instances — Team A's header `<Link>` component crashes because the router context comes from Team B's router, not Team A's.
-
-Show: the Module Federation `shared` config that forces a single `react-router-dom` instance (singleton), the version resolution strategy (`requiredVersion: 'x.y.z'`), and why UI component libraries should NOT be shared (each team's bundle stability vs shared code risk).""",
-
-"""**Task (Code Generation):**
-Build a `createCacheManager<K, V>` with LRU eviction, TTL expiry, and observable cache statistics:
+Investigation shows a custom hook creates a new query key on every render:
 
 ```ts
-const cache = createCacheManager<string, UserProfile>({
-  maxSize: 1000,
-  ttl: 300_000,    // 5 minutes
-  onEvict: (key, reason) => logger.debug(`Evicted ${key}: ${reason}`),
-  staleWhileRevalidate: true,
-});
-
-const user = await cache.getOrFetch('user:1', () => api.getUser('1'));
-const stats = cache.stats(); // { hits: 892, misses: 108, hitRate: 0.89, avgTtl: 220s }
+function useProductData(id: string) {
+  const timestamp = Date.now(); // new key each render!
+  return useQuery({
+    queryKey: ['product', id, timestamp], // changes every render
+    queryFn: () => api.getProduct(id),
+  });
+}
 ```
 
-Show: a doubly-linked list + Map for O(1) LRU operations, TTL using a sorted list sorted by expiry time, the `getOrFetch` pattern (returns stale + background refresh if stale-while-revalidate), and the `stats()` tracking.""",
-
-"""**Debug Scenario:**
-A Next.js app that renders hundreds of `<Link>` components is slow to hydrate because Next.js pre-fetches every link by default in the viewport. The network tab shows 150+ prefetch requests on the homepage.
-
-Show: disabling prefetch on non-critical links with `<Link prefetch={false}>`, the IntersectionObserver-based custom prefetch component that only prefetches when the user hovers over a link (intent signal), and configuring `router.prefetch` programmatically in response to `mouseover` events for the most important conversion paths.""",
+React Query creates a new `QueryObserver` for each unique `queryKey`. With a changing timestamp, each render registers a new observer. Show: removing `timestamp` from the query key, using `staleTime` for cache freshness control instead, and React Query devtools for visualizing the live observer count.""",
 
 """**Task (Code Generation):**
-Implement a `createObservableStore<S>` (MobX-lite) without the MobX dependency:
+Build a `createSagaRunner` for managing complex multi-step business workflows (without redux-saga dependency):
 
 ```ts
-const userStore = createObservableStore({
-  state: { name: 'Alice', score: 0, tags: [] as string[] },
-  actions: {
-    incrementScore: (state) => ({ ...state, score: state.score + 1 }),
-    addTag: (state, tag: string) => ({ ...state, tags: [...state.tags, tag] }),
+const checkoutSaga = createSagaRunner({
+  name: 'checkout',
+  steps: {
+    validateCart:   async (ctx) => { await validateInventory(ctx.cart); return ctx; },
+    applyDiscount:  async (ctx) => ({ ...ctx, total: applyDiscounts(ctx.cart, ctx.user) }),
+    charge:         async (ctx) => ({ ...ctx, paymentId: await chargeCard(ctx.total) }),
+    fulfillOrder:   async (ctx) => ({ ...ctx, orderId: await createOrder(ctx) }),
   },
-  computed: {
-    displayName: (state) => `${state.name} (${state.score} pts)`,
+  compensations: {
+    charge:         async (ctx) => await refundPayment(ctx.paymentId!),
+    validateCart:   async (ctx) => await releaseInventoryHold(ctx.cart),
   },
+  onStepStart:    (step) => logger.info(`Starting ${step}`),
+  onStepComplete: (step) => metrics.increment(`saga.${step}.success`),
+  onCompensate:   (step) => logger.warn(`Compensating ${step}`),
 });
 
-const { state, actions, computed, subscribe } = userStore;
-actions.incrementScore();
-console.log(computed.displayName); // "Alice (1 pts)"
+const result = await checkoutSaga.run({ cart, user });
 ```
 
-Show: the proxy-based approach for tracking property accesses, computed value memoization, `subscribe(key, callback)` for fine-grained reactivity, and React integration via `useSyncExternalStore`.""",
+Show: sequential step execution with accumulated context, automatic compensation (rollback) in reverse order on failure, TypeScript context type accumulation through steps, and retry logic per step.""",
 
 """**Debug Scenario:**
-A large React codebase has 47 contexts. Context re-renders propagate unnecessarily: changing a single context value re-renders all 47 consuming components even when their consumed value hasn't changed.
+A monorepo with 5 packages builds correctly but end-to-end tests fail with mismatched API types — the frontend uses a stale type definition for a request that the backend changed 3 days ago.
 
-Show: the context splitting pattern (fine-grained contexts per concern), a `createContextSelector` utility that wraps a context with `use-context-selector` to prevent non-dependent re-renders, splitting stable values (dispatch) from volatile values (state), and measurement with React DevTools Profiler showing before/after render counts.""",
+The frontend package has `@my-org/api-types` as a devDependency pinned to `^1.2.0`. The backend updated `api-types` to `1.3.0` (added required `correlationId` field) but the frontend wasn't updated.
 
-"""**Task (Code Generation):**
-Build a `<DataProvider>` component for co-locating data loading with component trees (like Relay):
-
-```tsx
-<DataProvider
-  queries={{
-    user:    UserQuery,
-    friends: FriendsQuery,
-    posts:   PostsQuery,
-  }}
-  variables={{ userId: id }}
-  render={({ user, friends, posts, loading, error }) => (
-    <ProfilePage user={user} friends={friends} posts={posts} />
-  )}
-/>
-```
-
-Show: parallel query loading, partial rendering (show `user` section as soon as it loads even if `friends` is still loading), TypeScript inference of `user`, `friends`, `posts` types from their query results, and a `<DataProvider.Prefetch>` component that prefetches data for the next likely page.""",
-
-"""**Debug Scenario:**
-A development team uses git hooks (Husky) to run TypeScript type-checking and ESLint on every commit. Commits take 45 seconds because `tsc` type-checks the entire monorepo.
-
-Show: replacing full `tsc` in git hooks with `tsc --noEmit --incremental` that reuses the `.tsbuildinfo` cache, using `lint-staged` to run ESLint only on staged files (not the entire codebase), configuring `eslint --cache` to persist the ESLint cache, and the `type-check` script that still runs full `tsc` in CI (no cache) for authoritative results.""",
+Show: pinning internal workspace packages to `workspace:*` (always uses the local workspace version), adding a CI step that runs `npm ls @my-org/api-types` and fails if versions differ between packages, using a `changesets` bot that requires all consumers to update when the API types package is changed, and a TypeScript project reference to the api-types package (forces recompilation when types change).""",
 
 """**Task (Code Generation):**
-Implement a `createQueryStore<T>` that combines server state (React Query) with client state (Zustand):
+Implement a `createCircuitBreaker<T>` for protecting services from cascade failures:
 
 ```ts
-const useProductQuery = createQueryStore<Product>({
-  queryKey: (id) => ['product', id],
-  queryFn: (id) => api.getProduct(id),
-  clientState: {
-    favorited: false,
-    localNotes: '',
+const paymentBreaker = createCircuitBreaker({
+  call: processPayment,
+  thresholds: {
+    failureRate: 0.5,      // open after 50% failure rate
+    sampleWindow: 20,      // over last 20 calls
+    successToClose: 3,     // require 3 successes to close (half-open)
   },
-  mergedSelectors: {
-    displayData: (serverData, clientState) => ({
-      ...serverData,
-      isFavorited: clientState.favorited,
+  timeout: 5000,           // calls fail-fast after 5s when open
+  onStateChange: (from, to) => metrics.record('circuit_breaker_state', { from, to }),
+  fallback: async () => ({ status: 'queued', message: 'Payment will be processed shortly' }),
+});
+
+try {
+  const result = await paymentBreaker.call(paymentData);
+} catch (e) {
+  // Circuit is open: e.message = 'Circuit breaker OPEN'
+}
+```
+
+Show: the state machine (closed → open → half-open → closed), the rolling failure rate window, and the `fallback` function that's called when the circuit is open.""",
+
+"""**Debug Scenario:**
+A developer deploys a breaking API change (removed a required field) to production without versioning the API. Existing mobile app users on version 1.x get errors because their app sends requests with the removed field and expects it in the response.
+
+Show: implementing URL versioning (`/api/v1/users`, `/api/v2/users`), or header versioning (`Accept: application/vnd.api.v2+json`), maintaining the v1 endpoint for backward compatibility with a deprecation warning header (`Deprecation: true`, `Sunset: 2025-06-01`), and a compatibility layer in v2 that accepts v1 request shapes and transforms them.""",
+
+"""**Task (Code Generation):**
+Build a `createSchemaEvolution<V>` system for migrating data between schema versions:
+
+```ts
+const userEvolution = createSchemaEvolution({
+  v1: z.object({ name: z.string(), email: z.string() }),
+  v2: z.object({ firstName: z.string(), lastName: z.string(), email: z.string() }),
+  v3: z.object({ firstName: z.string(), lastName: z.string(), email: z.string(), role: z.enum(['user', 'admin']) }),
+  migrations: {
+    'v1->v2': (v1) => ({
+      firstName: v1.name.split(' ')[0],
+      lastName: v1.name.split(' ').slice(1).join(' ') || '',
+      email: v1.email,
     }),
+    'v2->v3': (v2) => ({ ...v2, role: 'user' as const }),
   },
 });
 
-const { data, favorited, toggleFavorite, isLoading } = useProductQuery('prod_1');
+// Auto-migrates v1 data to v3:
+const v3User = userEvolution.migrate(v1Data, { from: 'v1', to: 'v3' });
 ```
 
-Show: the React Query + Zustand hybrid, TypeScript inference of both server and client state types, and the `mergedSelectors` pattern.""",
+Show: chaining migrations (`v1→v2→v3`), schema version detection from data shape, and backward compatibility checks.""",
 
 """**Debug Scenario:**
-A full-stack TypeScript app has its API types defined in the backend. The frontend manually duplicates these types. After a backend change (adding `middleName?: string` to `User`), the frontend doesn't update and TypeScript doesn't catch the drift.
-
-Design a shared types setup:
-1. `packages/api-types` — shared package with `User`, `Order`, `Product` types
-2. Backend generates updated types from database schema (Prisma → TypeScript)
-3. CI check: generates types from schema and compares against committed types (fails if drift)
-
-Show: the Turborepo monorepo config to add `api-types` as a dependency, the type generation script, and the CI comparison step using `git diff --exit-code`.""",
-
-"""**Task (Code Generation):**
-Build a `createRetryableQueue<T>` for processing items with automatic retry and dead letter:
+A Next.js app has multiple teams deploying different parts of the monorepo. After Team B deploys a shared `<Button>` component update, Team A's pages (not yet deployed) show broken layouts because the shared component's API changed:
 
 ```ts
-const queue = createRetryableQueue<WebhookEvent>({
-  processor: async (event) => await deliverWebhook(event),
-  maxAttempts: 5,
-  backoff: 'exponential', // 1s, 2s, 4s, 8s, 16s
-  onDead: (event, error) => deadLetterStore.add(event, error),
-  concurrency: 3,         // process 3 webhooks simultaneously
-});
+// Old Button API:
+<Button type="primary">Click</Button>
 
-await queue.enqueue(webhookEvent);
-queue.status(); // { pending: 10, processing: 3, retrying: 2, dead: 1 }
+// New Button API (breaking change):
+<Button variant="primary">Click</Button>  // 'type' prop removed
 ```
 
-Show: the priority queue (failed items with remaining attempts re-enqueue at the front), concurrency control with a semaphore, TypeScript generics for the event type, and React DevTools integration for the status dashboard.""",
-
-"""**Debug Scenario:**
-A microservice frontend communicates with 6 backend services, each with its own API contract. After a backend service changes its JSON response shape, the frontend breaks in production — no contract test caught it.
-
-Design a consumer-driven contract testing workflow:
-1. Frontend defines what it expects from each service in `pact/*.json` files
-2. `pact-js` tests verify the frontend can handle the backend contract
-3. Backend CI reads the pact files and verifies it produces those responses
-4. Pact Broker stores contracts and shows compatibility matrix
-
-Show the pact consumer test for the users service response shape and how to run backend provider verification.""",
+Show: semantic versioning for the shared component library with `changesets`, flagging breaking changes in PRs using the `changeset` bot, adding a `type` prop alias that maps to `variant` for backward compatibility during the transition period, and a Storybook visual regression test that catches UI changes before deployment.""",
 
 """**Task (Code Generation):**
-Implement a `useCommandHistory` hook for an undo/redo system based on the Command Pattern:
+Implement a `createQueryPlanner` for optimizing batched data fetching (DataLoader pattern):
 
 ```ts
-const history = useCommandHistory();
-
-// Define a command (do + undo):
-const addItemCommand = createCommand({
-  execute: () => setItems(prev => [...prev, newItem]),
-  undo:    () => setItems(prev => prev.filter(i => i.id !== newItem.id)),
-  description: `Add item "${newItem.name}"`,
-});
-
-history.execute(addItemCommand); // runs execute()
-history.undo();                  // runs undo() of last command
-history.redo();                  // re-runs execute() of undone command
-
-const { canUndo, canRedo, undoDescription } = history;
-// undoDescription: 'Add item "Widget"'
-```
-
-Show: the command stack management, composite commands (group multiple commands into one undoable unit), TypeScript for the command interface, and a toolbar component that shows the undo/redo history menu.""",
-
-"""**Debug Scenario:**
-A React app's Webpack build produces a `main.js` bundle with no code splitting. All 230 pages and their dependencies are bundled together. The developer added `React.lazy` for page components but they're all bundled together anyway.
-
-Investigation shows: the lazy-loaded page components import a shared `utils.ts` which imports `constants.ts` which imports every icon from `@/icons/index.ts`. The icon index file re-exports all 400 icons — creating a dependency chain that pulls all icons (and transitively all pages) into the main bundle.
-
-Show: refactoring `icons/index.ts` to use named exports with path imports (`@/icons/arrow`), setting `sideEffects: false` in the icon package's `package.json` for tree-shaking, and Webpack's `optimization.splitChunks` config to enforce that shared utilities don't bundle with entry points.""",
-
-"""**Task (Code Generation):**
-Build a `createFeatureRegistry<Feature>` for managing feature flags with remote config:
-
-```ts
-const features = createFeatureRegistry({
-  fetchConfig: () => fetch('/api/features').then(r => r.json()),
-  refreshInterval: 60_000,
-  defaults: {
-    'new-checkout':      false,
-    'ai-recommendations': false,
-    'dark-mode':         true,
+const userLoader = createQueryPlanner<string, User>({
+  batchFetch: async (ids) => {
+    const users = await db.users.findMany({ where: { id: { in: ids } } });
+    return ids.map(id => users.find(u => u.id === id) ?? null);
   },
+  batchDelay: 5,         // collect IDs for 5ms before firing
+  maxBatchSize: 100,     // max IDs per batch request
+  cacheKey: (id) => `user:${id}`,
+  cacheTTL: 60_000,
 });
 
-const isNewCheckout = await features.isEnabled('new-checkout');
-features.override('new-checkout', true);  // local override for testing
-features.onUpdate('new-checkout', (enabled) => updateCheckoutUI(enabled));
+// 50 simultaneous calls → 1 batched DB query:
+const [alice, bob, charlie] = await Promise.all([
+  userLoader.load('u1'),
+  userLoader.load('u2'),
+  userLoader.load('u3'),
+]);
 ```
 
-Show: the remote config polling, local storage overrides (for QA testing), the `onUpdate` subscriber, TypeScript constraint that `'new-checkout'` must be a key in the defaults object, and React integration with `useFeature` hook backed by the registry.""",
+Show: the tick-based batching (collect IDs within the current microtask queue, then batch), deduplication of duplicate IDs, the in-flight request cache (concurrent loads of the same ID share one Promise), and error per-item (one failed ID doesn't fail the entire batch).""",
 
 """**Debug Scenario:**
-A Next.js monorepo with Turborepo shows cache MISS on every CI run for the `build` pipeline, even when nothing changed. `turbo build --dry` shows all tasks as "cache not eligible."
+A React app's global error boundary catches React rendering errors but user reports show some errors appear only in safari private mode and are never caught:
 
-The cache key computation hash changes every run because the `build` task's `env` array includes `CI_JOB_ID` (a unique job identifier injected by the CI system):
+```
+TypeError: Cannot read properties of undefined (reading 'analytics')
+  at window.analytics.track (...)
+```
 
-```json
-{
-  "pipeline": {
-    "build": {
-      "env": ["CI_JOB_ID", "NODE_ENV", "DATABASE_URL"]
-    }
+This error occurs OUTSIDE of React's rendering tree (in an event listener, not during render). Error boundaries only catch errors thrown during rendering, in lifecycle methods, and in constructors. Show: `window.addEventListener('error', handler)` for uncaught synchronous errors, `window.addEventListener('unhandledrejection', handler)` for unhandled async errors, forwarding these to Sentry, and the `ErrorBoundary.getDerivedStateFromError` vs `componentDidCatch` API.""",
+
+"""**Task (Code Generation):**
+Build a `createDomainEventStore` for event-sourced state management:
+
+```ts
+const orderStore = createDomainEventStore<Order, OrderEvent>({
+  eventHandlers: {
+    'order.created':    (state, e) => ({ ...initialOrder, id: e.payload.orderId }),
+    'item.added':      (state, e) => ({ ...state, items: [...state.items, e.payload.item] }),
+    'discount.applied': (state, e) => ({ ...state, discount: e.payload.discount }),
+    'order.shipped':   (state, e) => ({ ...state, status: 'shipped', trackingId: e.payload.trackingId }),
+  },
+  initialState: null as Order | null,
+});
+
+// Build current state by replaying events:
+const currentOrder = orderStore.buildFrom(eventStream);
+
+// Project to a specific point in time:
+const orderAtTime = orderStore.buildFrom(eventStream, { upTo: new Date('2024-01-15') });
+```
+
+Show: the event replay engine, temporal queries, event store schema (event type, payload, timestamp, aggregate ID), and a React hook `useOrderState(orderId)` that subscribes to new events via WebSocket.""",
+
+"""**Debug Scenario:**
+A GraphQL API with subscriptions has a memory leak — `console.log('active subscriptions:', pubsub.subscriptionCount())` shows subscriptions growing from 100 to 50,000 over 24 hours, never decreasing.
+
+Investigation shows the subscription cleanup function (returned from the resolver) is never called when clients disconnect unexpectedly (browser tab closed without a clean WebSocket close):
+
+```ts
+Subscription: {
+  orderUpdated: {
+    subscribe: (_, { orderId }) => pubsub.asyncIterator(`order:${orderId}`),
+    // Missing: cleanup when client disconnects
   }
 }
 ```
 
-Show: removing `CI_JOB_ID` from `env` (ephemeral vars should not affect cache hash), using `globalPassThroughEnv` for vars that should be available at runtime but not affect the hash, and the `TURBO_TEAM` + `TURBO_TOKEN` configuration for using Turbo's remote cache across CI runs.""",
+Show: implementing `withFilter` from `graphql-subscriptions` that calls cleanup on disconnect, the WebSocket `close` event handler in `graphql-ws` server config that triggers garbage collection for the client's subscriptions, and `asyncIterator.return()` to clean up the async iterator.""",
 
 """**Task (Code Generation):**
-Implement a `<LiveDataTable>` that handles 1000+ rows with real-time WebSocket updates:
-
-```tsx
-<LiveDataTable
-  wsUrl="wss://prices.example.com/stream"
-  columns={pricingColumns}
-  rowKey="instrumentId"
-  updateStrategy="patch" // only re-render changed cells
-  maxRows={1000}
-  sortable
-  filterable
-/>
-```
-
-Show: the WebSocket message format (`{ type: 'update', rowId, field, value }`), cell-level update tracking (instead of row-level), `React.memo` with a custom `areEqual` that only re-renders changed cells, virtualization for 1000 rows with `react-virtual`, and the `updateStrategy: 'patch'` implementation that applies JSON-patch operations to row data.""",
-
-"""**Debug Scenario:**
-A React app uses `localStorage` for theme persistence. When two browser tabs are open and the user changes the theme in Tab A, Tab B doesn't update until the page is manually refreshed.
-
-Show: the `storage` window event that fires when `localStorage` is modified in ANOTHER tab (same-origin), a `useLocalStorageSync<T>` hook that listens to the event and updates React state, why the event does NOT fire in the same tab that modified storage (must use direct state update), and `BroadcastChannel` as a more modern alternative that works cross-origin with same-origin restriction.""",
-
-"""**Task (Code Generation):**
-Build a `createObservableState<S>` using JavaScript Proxy for transparent reactivity:
+Implement a `createMicroFrontendLoader` for dynamically loading micro-frontends:
 
 ```ts
-const state = createObservableState({ count: 0, user: { name: 'Alice', active: true } });
-
-// Automatic tracking — any access registers as a dependency:
-const double = derived(() => state.count * 2); // tracks 'count'
-effect(() => console.log(state.user.name));    // tracks 'user.name'
-
-state.count = 5;     // triggers double recalculation
-state.user.name = 'Bob'; // triggers name effect
-state.user.active = false; // doesn't trigger name effect (not tracked)
-```
-
-Show: the nested Proxy for deep path tracking, `WeakMap` for storing dependency subscriptions, `effect()` with automatic re-run on dependency change, and `derived()` with memoization (only recomputes when dependencies change).""",
-
-"""**Debug Scenario:**
-A styled-components-based design system is migrated to CSS Modules. Some components used the `css` template literal helper for conditional styles:
-
-```ts
-// styled-components (old):
-const className = css`
-  color: ${props.primary ? 'blue' : 'gray'};
-  ${props.disabled && css`opacity: 0.5; pointer-events: none;`}
-`;
-
-// CSS Modules (new): conditional class approach
-```
-
-Design the migration strategy: CSS Modules class composition with `clsx`, TypeScript helper for conditional class application, Storybook visual regression tests to validate the migration didn't change appearance, and a codemod script using `jscodeshift` to auto-migrate simple `styled.div` components to CSS Module + React component pairs.""",
-
-"""**Task (Code Generation):**
-Implement a `createWorkflow<Steps>` engine for multi-step asynchronous processes:
-
-```ts
-const orderWorkflow = createWorkflow({
-  steps: {
-    validateCart:     async (ctx) => { ... return { validated: true }; },
-    reserveInventory: async (ctx) => { ... return { reservationId: 'res_1' }; },
-    processPayment:   async (ctx) => { ... return { paymentId: 'pay_1' }; },
-    confirmOrder:     async (ctx) => { ... return { orderId: 'ord_1' }; },
+const loader = createMicroFrontendLoader({
+  registry: {
+    'checkout':    { url: 'https://checkout.example.com/remoteEntry.js', scope: 'checkout', module: './App' },
+    'product-feed': { url: 'https://catalog.example.com/remoteEntry.js', scope: 'catalog', module: './Feed' },
   },
-  onStepComplete: (step, result) => trackEvent('workflow_step', { step }),
-  onFailure: (step, error, ctx) => compensate(step, ctx),
+  sharedModules: { react: { singleton: true, requiredVersion: '^18.0.0' } },
+  onLoadError: (mfe, error) => fallbackRegistry.render(mfe),
 });
 
-const result = await orderWorkflow.run(initialContext);
+// Usage:
+const CheckoutApp = await loader.load('checkout');
+<Suspense fallback={<LoadingSpinner />}>
+  <CheckoutApp cartId={cartId} onComplete={handleCheckoutComplete} />
+</Suspense>
 ```
 
-Show: the sequential step execution passing accumulated context, compensation (rollback) on failure, TypeScript context type accumulation through steps, and a `resume` mechanism for resuming failed workflows from the last successful step.""",
+Show: dynamic `<script>` injection for the remote entry, Webpack Module Federation `__webpack_init_sharing__` and `__webpack_share_scopes__` global API calls, error boundaries per MFE, and version negotiation for shared modules.""",
 
 """**Debug Scenario:**
-A developer measures their React app's bundle with `webpack-bundle-analyzer` and finds that `@mui/material` (Material UI) adds 300KB to the bundle even though the app only uses 5 components.
+A monorepo's ESLint configuration has a `@typescript-eslint/no-floating-promises` rule that's disabled in 80% of files with `// eslint-disable-next-line`. The rule was intended to prevent unhandled Promise rejections but proved too noisy.
 
-```ts
-import { Button, TextField, Dialog, Table, Pagination } from '@mui/material';
-// Pulls in entire MUI library tree (300KB)
-```
-
-Show: path imports `import Button from '@mui/material/Button'` for non-tree-shakeable MUI v4, why MUI v5 with cjs bundles is already tree-shakeable with named imports (webpack handles it), configuring Babel's `babel-plugin-import` for transform-time import replacement, and using `@mui/material` with `sideEffects: false` in package.json for webpack tree-shaking.""",
+Show: configuring `no-floating-promises` to allow `void expression` pattern (`void somePromise()` to explicitly mark intentionally unhandled Promises), the `ignoreVoid: true` option, and using an ESLint custom rule plugin that checks for `void` usage context (ensures the developer consciously chose to ignore the Promise rather than forgetting to await it).""",
 
 """**Task (Code Generation):**
-Build a `useWindowManager` hook for managing floating panels/windows in a desktop-like app:
+Build a `createObservabilityMiddleware` for Express that provides distributed tracing:
 
 ```ts
-const { windows, open, close, focus, minimize, restore, arrange } = useWindowManager();
-
-open({ id: 'chat', title: 'Chat', component: ChatPanel, initialSize: { w: 400, h: 600 } });
-open({ id: 'notes', title: 'Notes', component: NotesPad, initialSize: { w: 300, h: 400 } });
-focus('chat');
-arrange('cascade'); // or 'tile-horizontal' | 'tile-vertical' | 'minimize-all'
+app.use(createObservabilityMiddleware({
+  tracer: opentelemetry.trace.getTracer('api-server'),
+  propagator: new W3CTraceContextPropagator(),
+  excludePaths: ['/health', '/metrics'],
+  enrichSpan: (span, req) => {
+    span.setAttribute('user.id', req.user?.id ?? 'anonymous');
+    span.setAttribute('tenant.id', req.headers['x-tenant-id']);
+  },
+  metricsExporter: prometheusExporter,
+}));
 ```
 
-Show: the window state management (position, size, z-index, minimized status), drag-to-move with `useDrag`, resize handles, z-index stacking (focused window always on top), cascade/tile layout algorithms, and `Portal`-based rendering so panels aren't affected by overflow clipping.""",
+Show: extracting trace context from incoming `traceparent` header (W3C Trace Context), creating a child span for each request, recording `http.method`, `http.status_code`, and `http.route` span attributes per OpenTelemetry semantic conventions, Prometheus counter/histogram for request duration, and forwarding the trace context to outgoing `fetch` calls within the request handler.""",
 
 """**Debug Scenario:**
-A client-side data transformation pipeline processes CSV data in the browser. Processing 100,000 rows takes 8 seconds on the main thread, freezing the UI.
+A team uses GitHub Actions to deploy to production on every merge to `main`. A typo in a recently merged PR broke the login flow in production for 40 minutes before it was noticed.
 
-Show: moving the CSV parsing and transformation to a Web Worker using `comlink` (RPC layer over Worker postMessage), a `useWorkerTransform` hook that tracks progress (worker sends progress events), `ReadableStream` for streaming large CSV files into the worker in chunks (instead of loading entirely into memory), and `structuredClone` for transferring data between main thread and worker without serialization overhead.""",
+Design a safer deployment pipeline:
+1. Static analysis gate (TypeScript + ESLint run on PR, block merge on failure)
+2. Preview deployments for every PR (Vercel/Netlify preview URLs)
+3. Smoke test that runs against preview before merging
+4. Canary deployment to main (5% of traffic → 25% → 100%, with automatic rollback on error spike)
+
+Show the GitHub Actions workflow YAML for the smoke test gate step and the canary traffic routing configuration.""",
+
+"""**Task (Code Generation):**
+Implement a `createAuthorizationEngine<Permissions>` with RBAC and ABAC:
+
+```ts
+const auth = createAuthorizationEngine({
+  roles: {
+    admin:    ['users:*', 'products:*', 'orders:*'],
+    manager:  ['products:read', 'products:write', 'orders:read'],
+    customer: ['products:read', 'orders:own:*'],
+  },
+  attributes: {
+    'orders:own:read': (user, resource) => user.id === resource.ownerId,
+    'orders:own:write': (user, resource) => user.id === resource.ownerId && resource.status === 'draft',
+  },
+});
+
+const can = await auth.check(user, 'orders:own:read', order);
+// can.allowed: true/false
+// can.reason: 'attribute-check:orders:own:read' | 'role:customer' | 'denied'
+```
+
+Show: the permission inheritance (wildcard matching `users:*`), attribute-based checks for ownership, permission caching, and Express middleware integration.""",
+
+"""**Debug Scenario:**
+A Prisma-based API has N+1 query problems. Fetching 10 blog posts each with their author triggers 11 database queries instead of 2:
+
+```ts
+const posts = await prisma.post.findMany({ take: 10 });
+// renders each post's author:
+for (const post of posts) {
+  const author = await prisma.user.findUnique({ where: { id: post.authorId } }); // 10 queries!
+}
+```
+
+Show: the `include` option in Prisma to join authors in a single query (`findMany({ include: { author: true } })`), Prisma's query log to count actual DB queries, `select` to limit returned fields (avoid over-fetching), and the DataLoader pattern for GraphQL resolvers that can't use Prisma joins.""",
+
+"""**Task (Code Generation):**
+Build a `createCRDTDocument<T>` for conflict-free collaborative editing:
+
+```ts
+const doc = createCRDTDocument<Document>({
+  initialState: { title: '', content: '', tags: [] },
+  mergeFn: {
+    title: 'last-write-wins',     // LWW with Lamport timestamp
+    content: 'operational-transform', // OT for text editing
+    tags: 'set-union',            // merge as sets (no duplicates)
+  },
+  clientId: generateClientId(),
+});
+
+// Local update:
+doc.update('title', 'New Title');
+
+// Remote update from another client:
+doc.merge(remoteOperation);
+
+// Both clients eventually converge to the same state
+const finalState = doc.state();
+```
+
+Show: Lamport timestamps for LWW, vector clocks for causality tracking, the text OT algorithm (insert/delete operations that transform around concurrent edits), and React integration for collaborative editing.""",
+
+"""**Debug Scenario:**
+A developer uses `try/catch` in an async function but the catch block never executes after a thrown error inside a `forEach` callback:
+
+```ts
+async function processAll(items: Item[]) {
+  try {
+    items.forEach(async (item) => {
+      await processItem(item); // throws!
+    });
+  } catch (e) {
+    console.log('caught!'); // never runs
+  }
+}
+```
+
+`forEach` doesn't await the async callbacks — it fires them all synchronously (returning Promises that float). The `try/catch` wraps synchronous `forEach`, not the async operations inside. Show: replacing `forEach` with `for...of` loop (properly awaits each), `Promise.all(items.map(async item => processItem(item)))` for concurrent processing with a single catchable rejection, and `Promise.allSettled` for processing all items even if some fail.""",
+
+"""**Task (Code Generation):**
+Implement a `createDatabaseMigrationRunner` with rollback support:
+
+```ts
+const runner = createDatabaseMigrationRunner({
+  migrations: [
+    {
+      id: '001_create_users',
+      up:   async (db) => { await db.query(`CREATE TABLE users (...)`); },
+      down: async (db) => { await db.query(`DROP TABLE users`); },
+    },
+    {
+      id: '002_add_roles',
+      up:   async (db) => { await db.query(`ALTER TABLE users ADD COLUMN role VARCHAR(50)`); },
+      down: async (db) => { await db.query(`ALTER TABLE users DROP COLUMN role`); },
+    },
+  ],
+  stateTable: '_migrations',    // tracks applied migrations
+});
+
+await runner.up();         // apply all pending
+await runner.down(1);      // rollback last 1
+await runner.status();     // list applied/pending
+```
+
+Show: the `_migrations` tracking table schema, transactional migration (rollback DB transaction if migration fails), checksum validation (detect if a migration file was modified after being applied), and dry-run mode that shows SQL without executing.""",
+
+"""**Debug Scenario:**
+A large express app has 200+ API routes. Adding authentication middleware to each route manually is error-prone — 12 routes are missing auth middleware and are publicly accessible.
+
+Show: a default-secure approach using a global middleware that applies auth to ALL routes, then an explicit `publicRoute` decorator or `auth: false` flag for routes that should be public:
+
+```ts
+app.use(authMiddleware); // secure everything by default
+
+// Explicit opt-out:
+app.get('/api/public/health', markAsPublic, healthHandler);
+app.post('/api/public/login', markAsPublic, loginHandler);
+```
+
+And an integration test that crawls all registered routes and asserts each either has `markAsPublic` or returns 401 without auth headers.""",
+
+"""**Task (Code Generation):**
+Build a `createMultiRegionClient` that routes requests to the nearest region:
+
+```ts
+const client = createMultiRegionClient({
+  regions: {
+    'us-east': { url: 'https://us-east.api.example.com', latency: Infinity },
+    'eu-west': { url: 'https://eu-west.api.example.com', latency: Infinity },
+    'ap-south':{ url: 'https://ap-south.api.example.com', latency: Infinity },
+  },
+  discoveryEndpoint: 'https://global.api.example.com/nearest-region',
+  fallbackStrategy: 'next-fastest',   // on error, try next region
+  healthCheckInterval: 30_000,
+});
+
+const data = await client.get('/api/data'); // automatically routes to nearest region
+```
+
+Show: latency measurement via `HEAD` requests to each region endpoint, the region selection algorithm, request retries with regional failover, and `navigator.connection.effectiveType` for adjusting the health check frequency on slow connections.""",
+
+"""**Debug Scenario:**
+A cloud-hosted app stores user sessions in a single Redis instance. When Redis has a maintenance window, ALL users are logged out simultaneously (sticky session problem).
+
+Show: a multi-tier session storage strategy — primary Redis, secondary Redis replica (read only, fallback), and a degraded mode that falls back to encrypted JWT cookies (stateless, no Redis needed at all) for the duration of the outage. The JWT fallback has a short 15-minute expiry and the server automatically switches back to Redis sessions when it recovers, with a `x-session-degraded: true` header that the client can use to show a "reduced functionality" notice.""",
+
+"""**Task (Code Generation):**
+Implement a `createWebhookDispatcher` that delivers events with guaranteed at-least-once delivery:
+
+```ts
+const dispatcher = createWebhookDispatcher({
+  storage: postgresQueue,    // persistent queue
+  workers: 5,                // concurrent delivery workers
+  delivery: {
+    timeout: 10_000,
+    retries: 5,
+    backoff: 'exponential',  // 1s, 2s, 4s, 8s, 16s
+  },
+  signing: { algorithm: 'HMAC-SHA256', headerName: 'X-Webhook-Signature' },
+  onDeliverySuccess: (event, attempt) => metrics.record('webhook_delivered'),
+  onDeadLetter: (event) => alertOps('webhook permanently failed', event),
+});
+
+await dispatcher.dispatch({
+  eventType: 'payment.completed',
+  payload: { orderId: 'ord_1', amount: 99.99 },
+  subscribers: ['https://partner-a.com/hooks', 'https://partner-b.com/hooks'],
+});
+```
+
+Show: the persistent queue schema, worker pool processing, retry scheduling with exponential backoff, HMAC signing of payload, and the dead-letter queue after max retries.""",
+
+"""**Debug Scenario:**
+A developer builds a real-time collaborative feature using WebSockets, but load testing shows the WebSocket server becomes a bottleneck at 5,000 concurrent connections. The server is a single Node.js process.
+
+Show: horizontal scaling with multiple Node.js WebSocket server processes, using Redis Pub/Sub as the message bus between processes (when user A sends a message, process 1 publishes to Redis, process 2 has user B subscribed and forwards the message), sticky session configuration in the load balancer (same client always routes to same WebSocket server to maintain connection state), and `socket.io`'s built-in Redis adapter that handles this pattern.""",
+
+"""**Task (Code Generation):**
+Build a `createEventualConsistencyChecker` for detecting stale reads after writes in distributed systems:
+
+```ts
+const checker = createEventualConsistencyChecker({
+  primaryRead:  (id) => primaryDb.users.find(id),
+  replicaRead:  (id) => replicaDb.users.find(id),
+  equalityFn:   (a, b) => a.version === b.version,
+  maxWait:      5000,   // wait up to 5s for replica to catch up
+  pollInterval: 100,    // check every 100ms
+});
+
+// After a write:
+await primaryDb.users.update(userId, { name: 'Alice' });
+const { converged, latency } = await checker.waitForConvergence(userId);
+// converged: true (replica caught up in 240ms)
+// latency:   240ms (replication lag)
+```
+
+Show: the polling loop that stops when primary and replica return equal results, timeout handling, using this in integration tests to verify replication lag SLAs, and a monitoring dashboard endpoint that reports current replication lag.""",
+
+"""**Debug Scenario:**
+A GraphQL API built with Apollo Server 4 returns `null` for a field that should never be null, causing the entire query to return `null` at the parent level due to error propagation:
+
+```graphql
+type User {
+  id: ID!
+  profile: Profile!  # Non-null — if this resolver throws, parent becomes null!
+}
+```
+
+In Apollo, if a non-null field resolver throws, the error propagates up to the nearest nullable parent. If `profile` is `!` (non-null) and it throws, `user` becomes `null`. Show: making the field nullable in the schema (`profile: Profile`) for resilience, using `@catch` directive (Apollo Gateway), wrapping the resolver in `try/catch` and returning a default profile, and the difference between Apollo's error masking (`formatError`) and `includeStacktraceInErrorResponses: false`.""",
 
 ]
