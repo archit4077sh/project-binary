@@ -1,546 +1,772 @@
 """
-snippets/q_typescript.py — BATCH 5: 28 brand-new TypeScript questions
-Zero overlap with batch1, batch2, batch3, or batch4 archives.
+snippets/q_typescript.py — BATCH 6: 56 brand-new TypeScript questions
+Zero overlap with batches 1-5 archives.
 """
 
 Q_TYPESCRIPT = [
 
 """**Task (Code Generation):**
-Implement a `Opaque<T, Brand>` type for preventing value misuse:
+Implement a `ParseJSON<S extends string>` type that extracts TypeScript types from a JSON string literal:
 
 ```ts
-type UserId    = Opaque<string, 'UserId'>;
-type ProductId = Opaque<string, 'ProductId'>;
-type OrderId   = Opaque<number, 'OrderId'>;
+type Data = ParseJSON<'{"name":"Alice","age":30,"active":true}'>;
+// Result: { name: string; age: number; active: boolean }
 
-function getUser(id: UserId): User { ... }
-function getProduct(id: ProductId): Product { ... }
-
-const userId:    UserId    = createId<UserId>('user-123');
-const productId: ProductId = createId<ProductId>('prod-456');
-
-getUser(productId);  // TypeScript Error: Argument of type 'ProductId' is not assignable to 'UserId'
-getUser(userId);     // OK
+type Arr = ParseJSON<'[1,2,3]'>;
+// Result: number[]
 ```
 
-Show: the `Opaque<T, Brand>` type using intersection with a brand type (`T & { readonly __brand: Brand }`), the `createId` factory that returns a branded type, `unwrap<T extends Opaque<...>>` to get the underlying value, and real-world benefits (prevents passing a userId where a productId is expected even though both are strings).""",
-
-"""**Debug Scenario:**
-A TypeScript function returns different types based on an overload, but the runtime behavior doesn't match:
-
-```ts
-function parse(input: string): number;
-function parse(input: number): string;
-function parse(input: any): any {
-  return input; // Bug! Should convert, but just returns as-is
-}
-
-const result = parse('42'); // TypeScript thinks: number
-console.log(typeof result); // 'string' at runtime — mismatch!
-```
-
-TypeScript trusts the implementation signature's return type annotation. The caller sees `number` but gets a `string`. Show: implementing the function body correctly, adding a `type: 'overload-mistake'` guard to detect mismatch, using a generic single-signature approach instead of overloads when the type relationship is simple, and runtime validation with Zod to catch the mismatch if it slips through.""",
+Show: template literal types recursively matching JSON value patterns (string literals, number literals, boolean), the `Trim` helper type (removes whitespace), `SplitPairs<S>` for parsing `key:value` pairs, and why this only works for literal types (not runtime values).""",
 
 """**Task (Code Generation):**
-Build a `DeepReadonly<T>` recursive type and `freeze` utility:
+Build a `TypedEventBus<Events>` with strict event name and payload type checking:
+
+```ts
+type AppEvents = {
+  'user:login':  { userId: string; timestamp: number };
+  'cart:update': { itemCount: number; total: number };
+  'error':       { code: string; message: string };
+};
+
+const bus = createEventBus<AppEvents>();
+
+bus.emit('user:login', { userId: 'u1', timestamp: Date.now() });   // OK
+bus.emit('user:login', { userId: 'u1' });                          // Error: missing timestamp
+bus.emit('unknown:event', {});                                     // Error: unknown event
+
+bus.on('cart:update', (payload) => {
+  console.log(payload.itemCount); // TypeScript: number
+});
+```
+
+Show: the generic `emit<K extends keyof Events>(event: K, payload: Events[K])` signature, typed `on` listener with strongly-typed payload, `off` for listener removal with the same type constraints, and a wildcard `on('*', handler)` overload that receives all events.""",
+
+"""**Task (Code Generation):**
+Implement a `DeepReadonly<T>` type that recursively makes all properties readonly:
 
 ```ts
 type Config = {
-  api: { url: string; timeout: number };
-  features: { darkMode: boolean; beta: string[] };
+  server: { host: string; port: number; ssl: { enabled: boolean; cert: string } };
+  features: { darkMode: boolean; analytics: Analytics };
 };
 
-type ReadonlyConfig = DeepReadonly<Config>;
-// ReadonlyConfig: {
-//   readonly api: { readonly url: string; readonly timeout: number };
-//   readonly features: { readonly darkMode: boolean; readonly beta: readonly string[] };
-// }
-
-const config = freeze<Config>({ api: { url: 'https://api.com', timeout: 5000 }, features: { darkMode: true, beta: [] } });
-config.api.url = 'foo'; // TypeScript Error: Cannot assign to 'url' because it is a read-only property.
+type FrozenConfig = DeepReadonly<Config>;
+// server.ssl.cert and all nested props become readonly
 ```
 
-Show: the recursive `DeepReadonly<T>` type that handles objects, arrays, and primitives, the `freeze` function using `Object.freeze` recursively at runtime, and why `Object.freeze` is only shallow (the type system helps document the contract even when runtime enforcement is impractical for deep objects).""",
-
-"""**Debug Scenario:**
-A TypeScript enum is used for string comparison and produces unexpected behavior:
-
-```ts
-enum Status {
-  Active = 'ACTIVE',
-  Inactive = 'INACTIVE',
-}
-
-const statusFromApi = 'ACTIVE'; // string from API response
-if (statusFromApi === Status.Active) {
-  // Works! But...
-}
-
-// Bug: Comparing enum to string value:
-const enumValue = Status.Active;
-const statusKey = 'Active'; // key, not value
-if (enumValue === statusKey) {
-  // Always false — enum VALUE is 'ACTIVE', not 'Active'
-}
-```
-
-Show: why TypeScript doesn't catch this comparison (both are strings at type level), using a type guard `(value: string): value is Status => Object.values(Status).includes(value as Status)`, the `const` assertion alternative (`const Status = { Active: 'ACTIVE' } as const; type Status = typeof Status[keyof typeof Status]`), and why union types of string literals are often preferable to string enums.""",
+Show: the base case (primitive types → unchanged), the recursive case (objects → map all values through `DeepReadonly`), handling arrays (`readonly T[]` vs `ReadonlyArray<T>`), handling functions (leave unchanged), and handling `Map`/`Set` (convert to `ReadonlyMap`/`ReadonlySet`).""",
 
 """**Task (Code Generation):**
-Implement a `createStateMachine<States, Events>` with TypeScript transitions:
+Build a `createTypeSafeReducer<State, Actions>` factory:
 
 ```ts
-const machine = createStateMachine({
-  initial: 'idle' as const,
+type CounterState = { count: number; step: number };
+type CounterActions =
+  | { type: 'INCREMENT' }
+  | { type: 'DECREMENT' }
+  | { type: 'SET_STEP'; step: number }
+  | { type: 'RESET' };
+
+const counterReducer = createTypeSafeReducer<CounterState, CounterActions>({
+  INCREMENT: (state) => ({ ...state, count: state.count + state.step }),
+  DECREMENT: (state) => ({ ...state, count: state.count - state.step }),
+  SET_STEP:  (state, action) => ({ ...state, step: action.step }),
+  RESET:     () => ({ count: 0, step: 1 }),
+});
+```
+
+Show: the handler map type (`{ [K in Actions['type']]: (state: State, action: Extract<Actions, { type: K }>) => State }`), TypeScript exhaustiveness checking (compile error if a `type` is missing from the map), and the curried reducer function returned by the factory.""",
+
+"""**Task (Code Generation):**
+Implement a `Paths<T>` type that generates all valid property path strings of a nested object:
+
+```ts
+type User = {
+  name: string;
+  address: { city: string; zip: string };
+  settings: { theme: 'light' | 'dark'; notifications: { email: boolean } };
+};
+
+type UserPaths = Paths<User>;
+// 'name' | 'address' | 'address.city' | 'address.zip' | 'settings' | 'settings.theme' | 'settings.notifications' | 'settings.notifications.email'
+
+type PathValue = PathValueAt<User, 'settings.notifications.email'>; // boolean
+```
+
+Show: the recursive template literal type building paths, the `PathValueAt<T, P>` companion type that resolves the value type at a given path, and limiting depth to prevent infinite recursion on circular types (`MaxDepth = 5` constraint).""",
+
+"""**Task (Code Generation):**
+Build a `createMachine<Schema>` for a fully type-safe XState-style state machine:
+
+```ts
+const trafficLight = createMachine({
+  id: 'traffic',
+  initial: 'red',
   states: {
-    idle:     { on: { START: 'loading' } },
-    loading:  { on: { SUCCESS: 'ready', ERROR: 'failed' } },
-    ready:    { on: { RESET: 'idle', REFRESH: 'loading' } },
-    failed:   { on: { RETRY: 'loading', RESET: 'idle' } },
+    red:    { on: { TIMER: 'green' } },
+    green:  { on: { TIMER: 'yellow' } },
+    yellow: { on: { TIMER: 'red' } },
+  },
+} as const);
+
+const service = interpret(trafficLight);
+service.send('TIMER');  // OK
+service.send('INVALID'); // TypeScript Error: 'INVALID' is not a valid event
+```
+
+Show: inferring `States` and `Events` from the schema using `typeof ... as const`, the `interpret` function typing `send` to only accept valid events for the current state, transition validation at compile time, and `createMachine` with context for machines that carry data alongside state.""",
+
+"""**Task (Code Generation):**
+Implement a `Pipeline<Input, Output>` type for a fluent data transformation chain:
+
+```ts
+const transform = pipeline<RawUser>()
+  .pipe((u) => ({ ...u, fullName: `${u.firstName} ${u.lastName}` }))
+  .pipe((u) => ({ ...u, initials: u.fullName.split(' ').map(w => w[0]).join('') }))
+  .pipe(async (u) => ({ ...u, avatar: await fetchAvatar(u.id) }))
+  .build();
+
+const result = await transform(rawUser);
+// Type: RawUser & { fullName: string, initials: string, avatar: string }
+```
+
+Show: the `pipe` method type signature that accumulates the return types (`PipeResult<A, B> = A & B`), async step handling (if any step returns `Promise<T>`, the final result is `Promise<FinalType>`), TypeScript's conditional types for async detection, and compile-time validation that each step's input type is compatible with the previous step's output.""",
+
+"""**Task (Code Generation):**
+Build a `StrictOmit<T, K>` type where `K` must be keys that actually exist in `T`:
+
+```ts
+type User = { id: string; email: string; password: string; role: string };
+
+type PublicUser = StrictOmit<User, 'password'>;   // OK
+type BadOmit    = StrictOmit<User, 'nonExistent'>; // TypeScript Error: 'nonExistent' not in User
+```
+
+Also build `StrictPick<T, K>`, `StrictRequired<T, K>`, and `StrictPartial<T, K>` (only specific fields optional/required).
+
+Show: the constraint `K extends keyof T`, the full utility types, and how `StrictRequired` works (`Required<Pick<T, K>> & Omit<T, K>`).""",
+
+"""**Task (Code Generation):**
+Implement a `createQueryString<Schema>` builder with typed parameters:
+
+```ts
+type SearchSchema = {
+  q: string;
+  page?: number;
+  limit?: number;
+  sort?: 'asc' | 'desc';
+  tags?: string[];
+};
+
+const buildURL = createQueryString<SearchSchema>(new URL('https://example.com/api/search'));
+
+const url = buildURL({ q: 'typescript', page: 2, tags: ['react', 'nextjs'] });
+// https://example.com/api/search?q=typescript&page=2&tags=react&tags=nextjs
+
+buildURL({ q: 'hello', sort: 'invalid' }); // TypeScript Error: type '"invalid"' not assignable
+```
+
+Show: the generic type constraint ensuring all keys match `Schema`, array handling (multiple `key=value` pairs), omitting `undefined` values, and the `parseQueryString<Schema>(url)` inverse function that validates and parses.""",
+
+"""**Task (Code Generation):**
+Build a `createDI<Container>` for a lightweight dependency injection container:
+
+```ts
+const container = createDI({
+  db:         () => new DatabasePool(process.env.DATABASE_URL!),
+  cache:      () => new RedisCache(process.env.REDIS_URL!),
+  userRepo:   (deps) => new UserRepository(deps.db),
+  authService:(deps) => new AuthService(deps.userRepo, deps.cache),
+  emailService:() => new EmailService(process.env.SMTP_HOST!),
+});
+
+// TypeScript infers the resolved type:
+const auth = container.resolve('authService'); // AuthService
+const db   = container.resolve('unknownDep'); // TypeScript Error!
+```
+
+Show: the `Container` type where each factory's `deps` arg is typed as the resolved values of other registered services, circular dependency detection at the type level, lazy initialization (instantiated on first `resolve`), and scoped containers (`container.createScope()`) where scoped instances are shared within a scope.""",
+
+"""**Task (Code Generation):**
+Implement a `Schema<T>` runtime validation type that generates TypeScript types AND runtime validators from a single definition:
+
+```ts
+const UserSchema = Schema.object({
+  id:    Schema.string().uuid(),
+  email: Schema.string().email(),
+  age:   Schema.number().int().min(0).max(150).optional(),
+  role:  Schema.enum(['admin', 'user', 'guest'] as const),
+});
+
+type User = Schema.infer<typeof UserSchema>;
+// { id: string; email: string; age?: number; role: 'admin' | 'user' | 'guest' }
+
+const result = UserSchema.parse(unknownInput);
+// result.success: boolean, result.data: User | result.errors: ValidationError[]
+```
+
+Show: the fluent builder pattern, `Schema.infer<T>` extracting the TypeScript type from the schema, runtime validation with detailed error paths, and `Schema.array(UserSchema)` for array schemas.""",
+
+"""**Task (Code Generation):**
+Build a `useTypedLocalStorage<T>` hook with schema validation on read:
+
+```ts
+const [session, setSession] = useTypedLocalStorage('user-session', {
+  schema: SessionSchema,           // Zod or custom validator
+  defaultValue: null,
+  serialize: (v) => JSON.stringify(v) + '_v2',  // versioned format
+  deserialize: (raw) => {
+    const str = raw.replace('_v2', '');
+    return JSON.parse(str);
   },
 });
 
-machine.send('START');    // OK: idle → loading
-machine.send('SUCCESS');  // OK: loading → ready
-machine.send('START');    // TypeScript Error: 'START' is not valid in state 'ready'
+setSession({ userId: 'u1', token: 'abc123', expiresAt: Date.now() + 3600_000 });
 ```
 
-Show: the TypeScript type that computes valid events per state, the generic constraints, the `StateOf<typeof machine>` and `EventOf<typeof machine>` utility types, and a React hook `useStateMachine` that integrates the machine with React state.""",
-
-"""**Debug Scenario:**
-A TypeScript project uses path aliases (`@/components/Button`) but the aliases work in TypeScript (IDE, `tsc`) but fail at runtime in Jest:
-
-```ts
-// tsconfig.json paths:
-{ "@/*": ["src/*"] }
-
-// Jest test file:
-import Button from '@/components/Button';
-// Error: Cannot find module '@/components/Button'
-```
-
-TypeScript path aliases are compile-time only — they don't affect how Node.js resolves modules at runtime. Jest uses its own module resolver. Show: configuring `moduleNameMapper` in Jest config (`{ '@/(.*)': '<rootDir>/src/$1' }`), using `ts-jest` with `pathsToModuleNameMapper` helper that reads aliases from `tsconfig.json` automatically, and the Babel approach using `babel-plugin-module-resolver`.""",
+Show: the read path: deserialize → validate with schema → fallback to `defaultValue` on parse error, the `storage` event listener for cross-tab sync, `useSyncExternalStore` for React-safe reads, and TypeScript inferring `T` from the `schema`'s output type.""",
 
 """**Task (Code Generation):**
-Build a `EventEmitter<Events>` with strongly-typed events:
+Implement a `Flatten<T>` type that deeply flattens nested arrays:
 
 ```ts
-type ServerEvents = {
-  connection: { clientId: string; ip: string };
-  disconnect: { clientId: string; reason: string };
-  message:    { clientId: string; data: unknown; timestamp: number };
-  error:      { code: number; message: string };
+type Nested = [1, [2, 3], [[4, 5]], [[[[6]]]]];
+type Flat = Flatten<Nested>; // [1, 2, 3, 4, 5, 6]
+
+type Mixed = [string, [number, [boolean, string[]]]];
+type FlatMixed = Flatten<Mixed>; // [string, number, boolean, ...string[]]
+```
+
+Show: the recursive conditional type (`T extends Array<infer Item>` → `Flatten<Item>` : `T`), the `infer` usage for tuple element extraction, handling empty arrays and `never`, and the depth limit with `Depth extends number[]` accumulator to avoid TypeScript's recursion limit.""",
+
+"""**Task (Code Generation):**
+Build a `createAPIClient<Routes>` with end-to-end type safety between client and server:
+
+```ts
+// Shared type (used by both client and server):
+type AppAPI = {
+  '/users':          { GET: { query: { limit?: number }; response: User[] } };
+  '/users/:id':      { GET: { params: { id: string }; response: User }; DELETE: { params: { id: string }; response: void } };
+  '/users/:id/posts':{ GET: { params: { id: string }; response: Post[] }; POST: { params: { id: string }; body: CreatePost; response: Post } };
 };
 
-const emitter = new TypedEventEmitter<ServerEvents>();
+const client = createAPIClient<AppAPI>('https://api.example.com');
 
-emitter.on('connection', ({ clientId, ip }) => {
-  console.log(`Client ${clientId} connected from ${ip}`);
+const users  = await client.get('/users', { query: { limit: 10 } });   // User[]
+const user   = await client.get('/users/:id', { params: { id: 'u1' } }); // User
+const post   = await client.post('/users/:id/posts', {                   // Post
+  params: { id: 'u1' },
+  body: { title: 'Hello World' },
 });
-
-emitter.on('disconnect', ({ clientId, reason }) => { ... });
-
-// TypeScript Error: 'data' is missing in message payload
-emitter.emit('message', { clientId: '1', timestamp: Date.now() });
 ```
 
-Show: the typed `on`, `off`, `emit`, and `once` methods, the TypeScript inference ensuring the payload type flows from the event name, and extending Node.js's `EventEmitter` vs building from scratch.""",
-
-"""**Debug Scenario:**
-A TypeScript generic function has an unexpected type widening:
-
-```ts
-function first<T>(arr: T[]): T | undefined {
-  return arr[0];
-}
-
-const nums = [1, 2, 3];
-const x = first(nums); // TypeScript infers: number | undefined ✓
-
-const mixed = [1, 'two', true];
-const y = first(mixed); // TypeScript infers: string | number | boolean | undefined ✓
-
-// Bug scenario:
-function processFirst<T extends string | number>(arr: T[]): T {
-  return arr[0]!; // Non-null assertion — but what if array is empty?
-}
-
-processFirst(['hello']); // OK
-processFirst([]);         // Runtime error: undefined, but TypeScript says string
-```
-
-Show: replacing `!` with an explicit check (`if (!arr[0]) throw new Error('Empty array')`), or returning `T | undefined` and letting the caller handle it, and the `[T, ...T[]]` non-empty array type to enforce at compile time that the array has at least one element.""",
+Show: path parameter replacement at runtime (`/users/:id` → `/users/u1`), the TypeScript overloads for `get`, `post`, `put`, `delete` methods, automatic response type inference, and validation with Zod on both client (response) and server (request body/params).""",
 
 """**Task (Code Generation):**
-Implement `ParseQueryString<S extends string>` as a pure type-level parser:
+Implement a `Mutable<T>` type hierarchy that toggles mutability at each level:
 
 ```ts
-type Parsed = ParseQueryString<'name=Alice&age=30&tags=a,b,c'>;
-// Result:
-// {
-//   name: 'Alice';
-//   age: '30';
-//   tags: 'a,b,c';
-// }
+type Immutable = {
+  readonly id: string;
+  readonly config: { readonly host: string; readonly port: number };
+};
 
-type Params = ParseQueryString<typeof window.location.search>; // typed!
+type MutableVersion  = Mutable<Immutable>;
+// { id: string; config: { host: string; port: number } }
+
+// Also implement ShallowMutable (only removes readonly at top level):
+type ShallowMutable = ShallowMutable<Immutable>;
+// { id: string; config: { readonly host: string; readonly port: number } }
 ```
 
-Show: the template literal type that splits on `&`, then splits each pair on `=`, builds an object from the key-value pairs using recursive mapped types, `infer` to extract keys and values, and a `ParseQueryStringValues<S>` variant that attempts to parse number and boolean values to their proper types.""",
-
-"""**Debug Scenario:**
-A TypeScript project uses `@ts-ignore` in 47 places. A new team member asks why, and explains that `@ts-expect-error` is safer. What's the difference and how to migrate?
-
-`@ts-ignore` suppresses the NEXT LINE unconditionally — if the error goes away (e.g., library update fixes the type), the comment stays silently. `@ts-expect-error` REQUIRES an error on the next line — if no error exists, TypeScript reports an "Unused '@ts-expect-error' directive" error, making it self-cleaning.
-
-Show: the ESLint rule `@typescript-eslint/prefer-ts-expect-error` that automatically flags `@ts-ignore` usages, a codemod to replace all `@ts-ignore` with `@ts-expect-error`, and the cases where `@ts-ignore` is still appropriate (e.g., in `.d.ts` declaration files where `@ts-expect-error` behavior differs).""",
+Show: the `-readonly` mapped type modifier, the `DeepMutable` recursive variant, and utility application: `Mutable<ReturnType<typeof createConfig>>` for making config objects modifiable in tests.""",
 
 """**Task (Code Generation):**
-Build a `Serializable<T>` type that validates at compile-time that a type can be safely JSON serialized:
+Build a `PermissionGuard<Role, Permission>` type system for RBAC:
 
 ```ts
-type SafeToSerialize<T> =
-  T extends undefined | Function | symbol ? never :
-  T extends Date ? never :          // Dates serialize to strings, losing type
-  T extends object ? { [K in keyof T]: SafeToSerialize<T[K]> } :
-  T;
+type Roles = 'admin' | 'manager' | 'user' | 'guest';
 
-type IsSerializable<T> = T extends SafeToSerialize<T> ? true : false;
+type RolePermissions = {
+  admin:   'read' | 'write' | 'delete' | 'admin';
+  manager: 'read' | 'write' | 'delete';
+  user:    'read' | 'write';
+  guest:   'read';
+};
 
-type A = IsSerializable<{ name: string; age: number }>;    // true
-type B = IsSerializable<{ fn: () => void }>;               // false
-type C = IsSerializable<{ date: Date }>;                    // false
-type D = IsSerializable<{ nested: { id: number } }>;       // true
+// TypeScript enforces that only valid permissions for the role are passed:
+function requirePermission<R extends Roles>(role: R, permission: RolePermissions[R]): void;
+
+requirePermission('admin', 'admin');       // OK
+requirePermission('user', 'delete');       // TypeScript Error!
+requirePermission('guest', 'read');        // OK
+requirePermission('manager', 'admin');     // TypeScript Error!
 ```
 
-Show: the recursive conditional type, using it to constrain API response types (`serialize<T extends SafeToSerialize<T>>(data: T): string`), and the `Branded<T, 'Serialized'>` type for tracking which values have been validated.""",
+Show: the discriminated union for access control, the `HasPermission<Role, Permission>` type returning `true | false`, and `WithRole<R extends Roles>` generic that constrains function arguments to role-specific permissions.""",
+
+# ── Debugging ─────────────────────────────────────────────────────────────────
 
 """**Debug Scenario:**
-A TypeScript interface uses `readonly` arrays but the runtime code modifies them:
+TypeScript infers `any` for a generic function when the type parameter should be inferred from a deeply nested argument:
 
 ```ts
-interface AppState {
-  readonly users: readonly User[];
+function extractField<T, K extends keyof T>(obj: T, key: K): T[K] {
+  return obj[key];
 }
 
-function addUser(state: AppState, user: User): AppState {
-  (state.users as User[]).push(user); // TypeScript allows with cast!
-  return state;
+const result = extractField({ name: 'Alice', age: 30 }, 'name');
+// result: string  ✓ — works for direct object
+
+type Wrapper<T> = { value: T };
+function extractWrapped<T, K extends keyof T>(wrapped: Wrapper<T>, key: K): T[K] {
+  return wrapped.value[key];
 }
+
+const res2 = extractWrapped({ value: { name: 'Alice' } }, 'name');
+// res2: any  ✗ — T isn't inferred from nested .value
 ```
 
-Type assertions (`as`) bypass TypeScript checks. The `readonly` modifier is erased at runtime — `push` succeeds. Show: the correct immutable update pattern (return a new array `[...state.users, user]` instead of mutating), why `readonly` is only a TypeScript compile-time check (not runtime enforcement), using `Object.freeze()` for actual runtime immutability, and a custom ESLint rule `@typescript-eslint/prefer-readonly` to catch function parameters that could be declared `readonly` but aren't.""",
-
-"""**Task (Code Generation):**
-Implement a `ReturnTypeDeep<T>` type that unwraps async functions:
-
-```ts
-type ReturnTypeDeep<T extends (...args: any) => any> =
-  ReturnType<T> extends Promise<infer Inner> ? Inner : ReturnType<T>;
-
-async function fetchUser(id: string): Promise<User> { ... }
-function getCount(): number { ... }
-async function getItems(): Promise<Item[]> { ... }
-
-type A = ReturnTypeDeep<typeof fetchUser>; // User (not Promise<User>)
-type B = ReturnTypeDeep<typeof getCount>;  // number
-type C = ReturnTypeDeep<typeof getItems>; // Item[]
-```
-
-Extend this to also handle `AsyncGenerator<T>`:
-
-```ts
-async function* streamData(): AsyncGenerator<Chunk> { ... }
-type D = ReturnTypeDeep<typeof streamData>; // Chunk
-```
-
-Show: extending `ReturnTypeDeep` to unwrap `AsyncGenerator<T>`, `Generator<T>`, and nested Promises (`Promise<Promise<T>>`).""",
+TypeScript can't always infer type parameters from nested generics. Show: explicitly providing the type parameter `extractWrapped<{ name: string }, 'name'>(...)`, or restructuring using `infer` in a conditional type, and the `satisfies` operator to constrain types without losing inference.""",
 
 """**Debug Scenario:**
-A TypeScript class uses a decorator that modifies the class constructor, but after compilation the decorator's mutations aren't reflected in the TypeScript types:
+A TypeScript `type` alias for a discriminated union stops narrowing correctly after being spread:
 
 ```ts
-@withLogger  // adds `logger: Logger` property at runtime
-class UserService {
-  getUser(id: string) {
-    this.logger.log(`Getting user ${id}`); // TypeScript Error: Property 'logger' does not exist
+type Result<T> = { success: true; data: T } | { success: false; error: string };
+
+function spreadBug(result: Result<User>) {
+  const { success, ...rest } = result;
+  if (success) {
+    rest.data; // Error: Property 'data' does not exist on type '{ error: string; }'
+    // TypeScript doesn't narrow 'rest' based on 'success'!
   }
 }
 ```
 
-Decorators in TypeScript stage 3 can't automatically augment the class type. Show: declaring the `logger` property on the class with a type assertion (`declare logger: Logger`), using module augmentation to add `logger` to the class interface, the newer `using` keyword (TypeScript 5.2) as an alternative for resource management patterns, and why class decorators in TypeScript must use the `declare` workaround for added properties until the ECMAScript decorator spec finalizes.""",
-
-"""**Task (Code Generation):**
-Build a `createValidator<T>` that generates runtime validators from TypeScript types using Zod:
-
-```ts
-const UserValidator = createValidator<User>(); // generates Zod schema at compile time
-const parsed = UserValidator.parse(apiResponse);
-// parsed is typed as User, with runtime validation
-
-// If TypeScript type changes, the validator automatically updates:
-type User = { id: number; email: string; role: 'admin' | 'user' };
-// No need to manually update a Zod schema!
-```
-
-Show: using `ts-to-zod` or a custom TypeScript transformer plugin that reads type definitions and generates Zod schemas at compile time, the transformer configuration in `tsconfig.json`, and why this approach (type-first) differs from Zod's schema-first approach (`z.infer<typeof UserSchema>`).""",
+Destructuring breaks discriminated union narrowing — TypeScript can't correlate `success` with the spread `rest`. Show: keeping the original `result` object for narrowing (`if (result.success) result.data`), the `if (success)` narrowing only applies to the `success` variable (not correlated with `rest`), and TypeScript 5.4's narrowing improvements for correlated union types.""",
 
 """**Debug Scenario:**
-A TypeScript discriminated union with exhaustiveness checking fails to catch a missing case:
+`Object.keys()` returns `string[]` instead of `(keyof T)[]`, causing TypeScript errors when iterating an object:
 
 ```ts
-type Shape = { kind: 'circle'; radius: number } | { kind: 'square'; side: number };
+type Config = { host: string; port: number; ssl: boolean };
+const config: Config = { host: 'localhost', port: 3000, ssl: false };
 
-function area(shape: Shape): number {
-  switch (shape.kind) {
-    case 'circle': return Math.PI * shape.radius ** 2;
-    case 'square': return shape.side ** 2;
-    // if 'triangle' is added to Shape, no TypeScript error here!
+for (const key of Object.keys(config)) {
+  console.log(config[key]); // Error: Element implicitly has an 'any' type
+  // because key is 'string', not keyof Config
+}
+```
+
+`Object.keys()` is typed to return `string[]` intentionally — objects can have extra keys at runtime beyond what TypeScript knows. Show: using `(Object.keys(config) as Array<keyof Config>)` as a cast, implementing a `typedKeys<T>(obj: T): (keyof T)[]` helper with the cast inside, and the subtle reason why string[] is correct (structural typing — `config` might actually have extra keys).""",
+
+"""**Debug Scenario:**
+A TypeScript `interface` augmentation for a third-party library throws "Duplicate identifier" in production builds but not in development:
+
+```ts
+// types/express.d.ts:
+import 'express';
+declare module 'express' {
+  interface Request {
+    user?: User;
   }
-  // implicitly returns undefined — TypeScript infers: number | undefined
+}
+
+// server.ts:
+// Also has a local augmentation! (copy-pasted from a tutorial):
+declare module 'express' {
+  interface Request {
+    user?: User; // Duplicate!
+  }
 }
 ```
 
-Adding `'triangle'` to `Shape` should cause a compile error in `area`. Show: the `never` exhaustiveness check pattern:
-
-```ts
-default:
-  const _exhaustive: never = shape; // Error when new Shape variant added
-  throw new Error(`Unhandled: ${_exhaustive}`);
-```
-
-And a utility type `assertNever(x: never): never` that provides the same guarantee with a better error message.""",
-
-"""**Task (Code Generation):**
-Implement a `createHttpClient<Routes>` with type-safe URLs and request/response types:
-
-```ts
-type ApiRoutes = {
-  'GET /users':              { response: User[]; query: { role?: string } };
-  'GET /users/:id':          { response: User; params: { id: string } };
-  'POST /users':             { response: User; body: CreateUserDto };
-  'PUT /users/:id':          { response: User; params: { id: string }; body: UpdateUserDto };
-  'DELETE /users/:id':       { response: void; params: { id: string } };
-};
-
-const client = createHttpClient<ApiRoutes>({ baseUrl: 'https://api.example.com' });
-
-// Fully typed:
-const users = await client.get('/users', { query: { role: 'admin' } });
-// users: User[]
-
-const user = await client.post('/users', { body: { name: 'Alice', email: '...' } });
-// user: User
-```
-
-Show: TypeScript inference of params, query, body, and response types from the route string, URL param interpolation, and a Zod-validated response deserializer.""",
+Two files both augment `express.Request`. In development, one file might not be picked up by the TypeScript language server, masking the duplicate. Show: consolidating all augmentations into a single `types/` folder entry, ensuring `tsconfig.json` `typeRoots` and `types` are properly set, and the correct pattern for augmenting third-party module types.""",
 
 """**Debug Scenario:**
-A TypeScript type guard is not narrowing correctly inside a callback:
+TypeScript throws "Type 'string' is not assignable to type 'never'" in a switch-case that should be exhaustive:
 
 ```ts
-function isUser(obj: unknown): obj is User {
-  return typeof obj === 'object' && obj !== null && 'id' in obj;
+type Color = 'red' | 'green' | 'blue';
+
+function getHex(color: Color): string {
+  switch (color) {
+    case 'red':   return '#ff0000';
+    case 'green': return '#00ff00';
+    // Missing: 'blue'!
+  }
+  // TypeScript: 'color' is type 'blue' here (unhandled), not 'never'!
+  const _exhaustive: never = color; // Error: Type 'blue' is not assignable to type 'never'
+}
+```
+
+Show: completing the switch with `case 'blue': return '#0000ff'`, the `assertNever` pattern (`function assertNever(x: never): never { throw new Error(...) }`), and using it as a default case instead of a post-switch assertion.""",
+
+"""**Debug Scenario:**
+A TypeScript generic function has an unexpected `any` when using a conditional type with `infer`:
+
+```ts
+type UnwrapPromise<T> = T extends Promise<infer U> ? U : T;
+
+function unwrap<T>(value: T): UnwrapPromise<T> {
+  return value instanceof Promise ? value.then(v => v) : value;
+  // Error: Type 'T | Promise<any>' is not assignable to type 'UnwrapPromise<T>'
+}
+```
+
+TypeScript can't verify the function body satisfies `UnwrapPromise<T>` because `T` is generic — the conditional type isn't resolved until `T` is known. Show: using function overloads (`function unwrap(v: Promise<T>): T; function unwrap<T>(v: T): T; function unwrap(v: any)`) as the implementation signature, and the `as UnwrapPromise<T>` cast as a pragmatic workaround.""",
+
+"""**Debug Scenario:**
+TypeScript intersection types produce an unexpected `never` when intersecting incompatible primitive types:
+
+```ts
+type A = { kind: 'circle'; radius: number };
+type B = { kind: 'square'; side: number };
+type AB = A & B;
+// AB.kind is: 'circle' & 'square' = never!
+// AB itself is technically valid but unusable — kind can never be assigned
+
+const x: AB = { kind: ???, radius: 5, side: 10 }; // impossible!
+```
+
+Show: using discriminated unions instead of intersections for this pattern (`type Shape = A | B`), the legitimate use cases for intersections (mixing capabilities: `type Editor = TextFeatures & FormattingFeatures`), and `IsNever<T>` helper type (`T extends never ? true : false`).""",
+
+"""**Debug Scenario:**
+A TypeScript `class` implements two interfaces but one has a method with the same name and different signature — TypeScript accepts the class but the method is ambiguously typed:
+
+```ts
+interface Serializable {
+  serialize(): string;
+}
+interface Saveable {
+  serialize(): Promise<string>; // DIFFERENT return type!
 }
 
-const items: unknown[] = fetchData();
-items.filter(isUser).forEach(item => {
-  console.log(item.id); // TypeScript Error: 'id' does not exist on 'unknown'
-});
+class Document implements Serializable, Saveable {
+  serialize(): string | Promise<string> { // TypeScript accepts this...
+    return JSON.stringify(this.data);     // but the overloaded sig is confusing
+  }
+}
 ```
 
-`Array.filter` with a type guard SHOULD narrow the type of the array, but the TypeScript inference for `filter` requires that the type guard be used as a predicate in the generic signature.
-
-Show: why this failure occurs in older TypeScript versions (the `filter` overload without generic inference), the corrected pattern for TypeScript 5.5+ which has improved `filter` narrowing, and the explicit type assertion workaround `items.filter(isUser) as User[]` for older TypeScript.""",
-
-"""**Task (Code Generation):**
-Build a `FormSchema` type that derives TypeScript types from an HTML form structure:
-
-```ts
-const loginForm = defineForm({
-  fields: {
-    email:    { type: 'email',    required: true  },
-    password: { type: 'password', required: true, minLength: 8 },
-    remember: { type: 'checkbox', required: false },
-  },
-});
-
-type LoginFormData = InferFormData<typeof loginForm>;
-// { email: string; password: string; remember: boolean | undefined }
-
-const result: LoginFormData = loginForm.parse(formEvent.target);
-// Runtime validation + type narrowing in one step
-```
-
-Show: the `defineForm` factory, `InferFormData` mapped type that derives field types from `type` strings (`email | text | password → string`, `checkbox → boolean`, `number → number`), required fields (always present) vs optional (union with undefined), and runtime parsing from `FormData`.""",
+Show: explicitly overloading `serialize` to handle both cases, using a separate method for `Saveable.serialize`, and the design recommendation against using the same method name with different semantics in interfaces meant to be combined.""",
 
 """**Debug Scenario:**
-A TypeScript project's `tsc --build` produces incorrect output after renaming a file. Old compiled files persist in the `dist/` directory and are imported by other modules:
-
-```
-src/helpers.ts  → renamed to src/utils.ts
-dist/helpers.js → still exists! (orphan file)
-dist/utils.js   → new file
-```
-
-`tsc` doesn't clean deleted source files from `dist/`. Any code that imports `../dist/helpers.js` directly still works but uses old code. Show: adding a `prebuild` script that runs `rimraf dist` before `tsc`, configuring `tsconfig.json` with `"noEmitOnError": true` to prevent partial builds, using `tsc --build --clean` (project references only), and `ts-node` / `tsx` for running TypeScript directly without a dist directory.""",
-
-"""**Task (Code Generation):**
-Implement `Flatten<T>` and `DeepFlatten<T>` types for nested array types:
+A TypeScript function that accepts an object with default parameters loses type narrowing:
 
 ```ts
-type A = Flatten<number[][]>;     // number[]
-type B = Flatten<string[][][]>;   // string[][]
-type C = DeepFlatten<number[][][]>;  // number[]
-type D = DeepFlatten<Array<Array<Array<{ id: number }>>>>;  // { id: number }[]
-
-function flatten<T>(arr: T[][]): T[] { return arr.flat(); }
-function deepFlatten<T>(arr: DeepArray<T>): T[] { return arr.flat(Infinity) as T[]; }
-
-type DeepArray<T> = Array<T | DeepArray<T>>;
+function processUser({ role = 'user', permissions = [] }: Partial<UserOptions> = {}) {
+  if (role === 'admin') {
+    // TypeScript: role is 'admin' here ✓
+    permissions; // TypeScript: string[] | undefined — but it should be string[]!
+  }
+}
 ```
 
-Show: `Flatten<T>` using conditional type (`T extends Array<infer U> ? U extends Array<infer V> ? ...`), `DeepFlatten<T>` using recursive conditional type, the `DeepArray<T>` recursive type alias, and TypeScript's recursion depth limit and how to work around it with `[...T[]]` spreads.""",
+Narrowing `role === 'admin'` doesn't narrow `permissions` — TypeScript doesn't model multi-property narrowing for destructured parameters. Show: explicitly narrowing `permissions` with `permissions ?? []`, typing with discriminated unions (`AdminOptions | UserOptions`), and the `satisfies` operator to verify type compatibility without widening.""",
 
 """**Debug Scenario:**
-A TypeScript app uses namespace imports and hits circular dependency issues:
+TypeScript reports "Property 'X' does not exist on type 'Y'" for a type guard that should have narrowed the type:
+
+```ts
+function isAdmin(user: User): user is AdminUser {
+  return user.role === 'admin';
+}
+
+function handleUser(user: User) {
+  if (isAdmin(user)) {
+    user.adminSecret; // Error: Property 'adminSecret' does not exist on type 'User'
+  }
+}
+```
+
+Investigation: `AdminUser` is not imported in the file where `handleUser` is defined, causing silent resolution failure. The `is AdminUser` predicate is ignored because TypeScript can't resolve the type. Show: ensuring `AdminUser` is imported in the consuming file, using inline type predicates (`user is User & { adminSecret: string }`) as an alternative, and verifying type guard effectiveness with `// @ts-expect-error` tests.""",
+
+"""**Debug Scenario:**
+A TypeScript mapped type over a union produces incorrect results:
+
+```ts
+type Stringify<T> = { [K in keyof T]: string };
+
+type Unioned = Stringify<{ a: number } | { b: boolean }>;
+// Expected: { a: string } | { b: string }
+// Actual:   { a: string; b: string } — merged, not unioned!
+```
+
+Mapped types distribute over unions when applied to a bare type parameter. `Stringify<T>` with `T = A | B` maps EACH member separately only if `T` is a bare type parameter in the mapping. Show: using a distributive mapped type (`type Stringify<T> = T extends object ? { [K in keyof T]: string } : T`) to force distribution, the difference between distributive and non-distributive conditional types, and `[T] extends [U]` to prevent distribution.""",
+
+"""**Debug Scenario:**
+TypeScript doesn't narrow a type correctly when checking an enum value:
+
+```ts
+enum Status { Active = 'active', Inactive = 'inactive', Pending = 'pending' }
+
+function handle(status: Status) {
+  if (status !== Status.Inactive && status !== Status.Pending) {
+    status; // TypeScript: still 'Status', not narrowed to 'Status.Active'!
+  }
+}
+```
+
+TypeScript doesn't narrow out-of-enum values from enum types in the way it does with string literal unions. Show: using a string literal union `type Status = 'active' | 'inactive' | 'pending'` instead of `enum` for better narrowing, using `if (status === Status.Active)` positive narrowing, and the `const enum` vs `enum` difference.""",
+
+"""**Debug Scenario:**
+A TypeScript project's `paths` alias in `tsconfig.json` works in the IDE but fails at runtime:
+
+```json
+// tsconfig.json:
+{ "paths": { "@utils/*": ["./src/utils/*"] } }
+```
+
+```ts
+import { formatDate } from '@utils/date'; // Works in TypeScript!
+// At runtime: Cannot find module '@utils/date'
+```
+
+TypeScript `paths` are compile-time only — they don't transform actual import paths in the output JS (except when using `tsc`'s path rewriting in certain configs). Show: configuring the bundler (Vite: `resolve.alias`, Webpack: `resolve.alias`) to handle the same aliases, using `tsconfig-paths` for Node.js runtime resolution (`ts-node -r tsconfig-paths/register`), and Jest's `moduleNameMapper` for tests.""",
+
+"""**Debug Scenario:**
+A TypeScript `readonly` array causes an error when passing to a function expecting a mutable array:
+
+```ts
+const items = ['a', 'b', 'c'] as const; // readonly ['a', 'b', 'c']
+
+function reverse(arr: string[]): string[] {
+  return arr.reverse(); // arr.reverse() is fine
+}
+
+reverse(items); // Error: Argument of type 'readonly ["a","b","c"]' not assignable to parameter of type 'string[]'
+```
+
+`readonly` arrays aren't assignable to mutable arrays because the function could mutate. Show: typing `reverse` to accept `readonly string[]` (safe, function doesn't mutate), using `[...items]` to create a mutable copy before passing, `ReadonlyArray<string>` vs `readonly string[]` (same type, different syntax), and the `Readonly<T[]>` utility type.""",
+
+"""**Debug Scenario:**
+TypeScript complains about a `null` assertion (`!`) but the code is clearly safe:
+
+```ts
+const element = document.getElementById('app');
+element!.addEventListener('click', handler); // Non-null assertion works
+
+// But later:
+const { style } = element!; // Error in strict mode: still complains!
+function updateElement() {
+  element!.style.color = 'red'; // TypeScript: Not safe — element! in different scope
+}
+```
+
+`!` is a per-expression assertion — TypeScript doesn't remember the assertion across expressions or function boundaries. Show: declaring a separate narrowed variable (`const el = element!`), checking once and throwing (`if (!element) throw new Error('...')`), and using `??` with `document.createElement` as a fallback instead of asserting non-null.""",
+
+"""**Debug Scenario:**
+TypeScript `noUncheckedIndexedAccess` is enabled and code breaks in unexpected places:
+
+```ts
+// tsconfig.json: "noUncheckedIndexedAccess": true
+
+const items = ['a', 'b', 'c'];
+const first = items[0]; // Type: string | undefined  (was: string)
+first.toUpperCase();    // Error: 'first' is possibly 'undefined'
+
+// Expected: items[0] is definitely 'a', why is it undefined?
+```
+
+`noUncheckedIndexedAccess` adds `| undefined` to ALL index accesses, even when the index is statically known to be in-bounds. Show: checking before use (`if (first) first.toUpperCase()`), using destructuring with a default (`const [first = ''] = items`), using `items.at(0)` (still returns `string | undefined` with the flag), and when `noUncheckedIndexedAccess` is worth the verbosity (public APIs with unknown inputs).""",
+
+"""**Debug Scenario:**
+A TypeScript function using `ReturnType<typeof fn>` breaks when the function is overloaded:
+
+```ts
+function fetch(url: string): Promise<string>;
+function fetch(url: string, options: Options): Promise<Response>;
+function fetch(url: string, options?: Options): Promise<string | Response> {
+  ...
+}
+
+type FetchReturn = ReturnType<typeof fetch>;
+// Expected: Promise<string> | Promise<Response>
+// Actual:   Promise<string | Response>  — picks the LAST overload!
+```
+
+`ReturnType<>` picks the last overload signature for overloaded functions. Show: defining separate typed functions and a union type manually (`type FetchReturn = Promise<string> | Promise<Response>`), using conditional types to simulate overloads without actual overloads, and the `OverloadUnion` utility type from the `type-fest` library.""",
+
+"""**Debug Scenario:**
+TypeScript's `strictFunctionTypes` causes a regression when passing a callback typing:
+
+```ts
+type Handler = (event: MouseEvent) => void;
+type AnyHandler = (event: Event) => void;  // Event is broader
+
+declare function addListener(handler: AnyHandler): void;
+
+const mouseHandler: Handler = (e: MouseEvent) => console.log(e.button);
+addListener(mouseHandler); // Error with strictFunctionTypes!
+// Type 'Handler' is not assignable to type 'AnyHandler'
+```
+
+`strictFunctionTypes` enforces function type parameter contravariance — you can't use a `MouseEvent`-specific handler where an `Event` handler is expected (the function might be called with a `KeyboardEvent`). Show: widening the handler type (`(event: Event | MouseEvent) => void`), using `(event: Parameters<AnyHandler>[0]) => void` to properly type the parameter, and why contravariance is correct (callers of `AnyHandler` might pass non-MouseEvent events).""",
+
+"""**Debug Scenario:**
+A TypeScript project has circular type imports that cause "Type alias 'X' circularly references itself":
 
 ```ts
 // user.ts:
-import * as Order from './order';
-export type User = { orders: Order.Order[] };
+import { Post } from './post';
+export type User = { id: string; posts: Post[] };
 
-// order.ts:
-import * as User from './user';
-export type Order = { user: User.User; items: Item[] };
+// post.ts:
+import { User } from './user';
+export type Author = User; // Circular!
+export type Post = { id: string; author: Author; content: string };
 ```
 
-Both modules import each other at the type level. TypeScript resolves type-only circular dependencies, but the JavaScript module runtime may evaluate them in the wrong order if they have value exports too.
-
-Show: using `import type` for type-only imports (zero cost at runtime, no circular initialization), a shared `types.ts` file that both modules import from (breaking the cycle), and the `@typescript-eslint/no-import-type-side-effects` rule.""",
-
-"""**Task (Code Generation):**
-Build a `createAsyncQueue<T>` with TypeScript generics and priority support:
-
-```ts
-const queue = createAsyncQueue<ProcessingJob>({
-  concurrency: 3,
-  timeout: 30_000,
-  onError: (job, error) => logger.error({ job, error }),
-});
-
-// Job with priority (lower number = higher priority):
-queue.enqueue({ id: '1', data: heavyTask, priority: 1 });
-queue.enqueue({ id: '2', data: lightTask, priority: 10 });
-
-// TypeScript knows the job type:
-queue.onComplete((job: ProcessingJob) => { ... });
-queue.stats(); // { running: 2, pending: 8, completed: 143, failed: 2 }
-```
-
-Show: the generic `T` constraint, the priority queue implementation (sorted insert using binary search), concurrency semaphore, timeout using `Promise.race`, and the `stats()` return type inferred from the internal counters.""",
+TypeScript usually handles circular type imports well, but the error appears when the types use `type` aliases that resolve through each other in a way the compiler can't fully evaluate. Show: using `interface` instead of `type` for object types (interfaces handle circular references better), forward declaring with `type Post = { ... }; type User = { posts: Post[] }` in a single file, and using `id: string` instead of the full type for back-references to break the cycle.""",
 
 """**Debug Scenario:**
-A TypeScript function has a conditional return type but `strictFunctionTypes` causes unexpected errors:
+TypeScript's template literal types don't match at runtime even though they compile correctly:
 
 ```ts
-function getValue<T extends boolean>(flag: T): T extends true ? string : number {
-  return flag ? 'hello' : 42; // TypeScript Error: Type 'string | number' is not assignable to T extends true ? string : number
+type EventName = `on${Capitalize<string>}`;
+declare function on<E extends EventName>(event: E, handler: () => void): void;
+
+on('onClick', () => {});  // OK
+on('onSubmit', () => {}); // OK
+on('click', () => {});    // TypeScript Error: 'click' doesn't match `on${string}` ✓
+
+// But at runtime:
+const event = 'onClick';
+on(event as EventName, handler); // Works but runtime value not enforced
+```
+
+Template literal types are compile-time only — they don't validate runtime strings. Show: using Zod's `z.string().startsWith('on')` for runtime validation, a registry pattern where valid event names are tracked in a `Map`, and `satisfies EventName` to verify a string literal meets the template pattern at compile time.""",
+
+"""**Debug Scenario:**
+TypeScript `typeof` in a conditional type narrows to `never` unexpectedly:
+
+```ts
+type IsString<T> = T extends string ? 'yes' : 'no';
+
+type Test1 = IsString<string>;  // 'yes' ✓
+type Test2 = IsString<number>;  // 'no' ✓
+type Test3 = IsString<string | number>; // 'yes' | 'no' ✓ (distributive)
+type Test4 = IsString<never>;   // never — NOT 'no'!
+```
+
+When `T = never`, the conditional type short-circuits to `never` (distributing over an empty union produces an empty union = `never`). Show: wrapping in `[T] extends [string]` to prevent distribution (`[never] extends [string]` → `false` → `'no'`), the `IsNever<T>` helper, and common uses of this pattern (e.g., checking if a mapped type produced any members).""",
+
+"""**Debug Scenario:**
+A TypeScript generic class with default type parameters fails to infer when the default is used:
+
+```ts
+class ApiClient<TResponse = unknown, TError = Error> {
+  async request(url: string): Promise<TResponse> { ... }
+}
+
+const client = new ApiClient<User>(); // TResponse=User, TError=Error (default)
+const result = await client.request('/api/user');
+// result: User ✓ — but:
+
+// Can't partially apply type params in some contexts:
+function makeClient<T>(): ApiClient<T> {
+  return new ApiClient<T>(); // TError reverts to 'unknown' instead of 'Error'!
 }
 ```
 
-TypeScript can't verify the relationship between the runtime `flag` value and the conditional type — it sees the return as `string | number`, not the conditional. Show: using function overloads as the idiomatic solution, a type assertion as a temporary fix (`return (flag ? 'hello' : 42) as any`), and why conditional return types with generic arguments require overloads or type assertions (TypeScript doesn't "execute" conditional types based on runtime values).""",
+When explicitly providing type parameters, skipping middle parameters doesn't apply defaults — you must provide all or none. Show: using a factory function to apply defaults (`function makeClient<T, E = Error>(): ApiClient<T, E>`), the limitation of TypeScript's partial type arg application, and the `type-fest` library's `FixedLengthArray` pattern for working around this.""",
 
-"""**Task (Code Generation):**
-Implement a `NetworkRequest<T>` discriminated union for exhaustive response handling:
+"""**Debug Scenario:**
+TypeScript's `as const` doesn't make nested objects fully readonly in a `satisfies` expression:
 
 ```ts
-type NetworkRequest<T> =
-  | { status: 'idle' }
-  | { status: 'loading' }
-  | { status: 'success'; data: T; timestamp: number }
-  | { status: 'error'; error: Error; retryCount: number };
+const config = {
+  server: { port: 3000, host: 'localhost' },
+  features: ['auth', 'payments'],
+} as const satisfies ServerConfig;
 
-function renderUser(request: NetworkRequest<User>): JSX.Element {
-  switch (request.status) {
-    case 'idle':    return <Placeholder />;
-    case 'loading': return <Spinner />;
-    case 'success': return <UserCard user={request.data} />;
-    case 'error':   return <ErrorMessage error={request.error} onRetry={...} />;
+config.server.port = 4000; // Error: readonly ✓
+config.features.push('analytics'); // Error: readonly ✓
+
+// But:
+const copy = { ...config }; // Mutable shallow copy!
+copy.server.port = 4000; // No error — copy.server is not readonly!
+```
+
+`as const` makes the original binding readonly, but a spread copy creates a mutable shallow copy. Show: `structuredClone` creating a mutable deep copy (different semantics), `Object.freeze` for runtime immutability, and the `DeepReadonly<typeof config>` type to keep the spread copy typed as readonly (`const copy: DeepReadonly<typeof config> = { ...config }`).""",
+
+"""**Debug Scenario:**
+A developer uses `Parameters<typeof fn>` to type a wrapper function, but when `fn` is overloaded, the wrapper only accepts the parameters of the last overload:
+
+```ts
+function parse(input: string): number;
+function parse(input: string, radix: number): number;
+function parse(input: string, radix?: number): number { ... }
+
+function safeParseWrapper(...args: Parameters<typeof parse>) {
+  // args: [input: string, radix?: number] — only last overload!
+  return parse(...args);
+}
+
+safeParseWrapper('42');         // OK
+safeParseWrapper('42', 10);     // OK — both happen to work here
+```
+
+Show: the `OverloadUnion<typeof parse>` approach to unify all overload parameter sets, using function overloads on the wrapper itself (matching all overloads of `fn`), and when `Parameters<>` is safe to use (non-overloaded functions, or when you intentionally want only the last overload).""",
+
+"""**Debug Scenario:**
+A TypeScript file with `export {}` at the bottom breaks module augmentation in another file:
+
+```ts
+// global.d.ts (intended as ambient module augmentation)
+declare global {
+  interface Window {
+    myPlugin: MyPlugin;
+  }
+}
+export {}; // Makes this a module — required to use 'declare global'
+```
+
+```ts
+// component.ts
+window.myPlugin; // Works fine!
+```
+
+But adding `import { something } from 'nowhere'` to `global.d.ts` breaks it — it's now both a module AND has global augmentation, requiring the `/// <reference types="..." />` directive. Show: the correct structure for type augmentation files, the `declare global { }` requirement in module files (files with `import/export`), and `typeRoots` configuration for global type files.""",
+
+"""**Debug Scenario:**
+A TypeScript `Record<string, unknown>` causes issues when trying to iterate with `Object.entries`:
+
+```ts
+function processConfig(config: Record<string, unknown>) {
+  for (const [key, value] of Object.entries(config)) {
+    // value: unknown — need to narrow
+    if (typeof value === 'string') {
+      console.log(key + ': ' + value.toUpperCase()); // OK
+    }
+    if (typeof value === 'object' && value !== null) {
+      processConfig(value); // Error: 'unknown' not assignable to Record<string, unknown>
+    }
   }
 }
 ```
 
-Show: TypeScript's exhaustiveness check enforcing all cases are handled, a `createNetworkRequest<T>` factory, transition functions (`toLoading`, `toSuccess`, `toError`) that enforce valid state transitions, and a React hook `useNetworkRequest<T>` that wraps `fetch` and returns the discriminated union.""",
+After narrowing `value` to `object`, TypeScript still sees it as `object`, not `Record<string, unknown>`. Show: using `as Record<string, unknown>` cast after the `typeof` narrowing check, the `isRecord(v: unknown): v is Record<string, unknown>` type guard, and avoiding this pattern with discriminated unions or specific interfaces for known config shapes.""",
 
 """**Debug Scenario:**
-A TypeScript class method `bind`s `this` but loses TypeScript type inference:
+TypeScript's `exactOptionalPropertyTypes` flag causes compilation errors in code that previously worked:
 
 ```ts
-class EventHandler {
-  private handler = 'click-handler';
-  
-  handleClick(event: MouseEvent): void {
-    console.log(this.handler, event.type);
-  }
+// tsconfig.json: "exactOptionalPropertyTypes": true
+
+type Options = { debug?: boolean };
+
+const opts1: Options = { debug: undefined }; // Error! With exactOptional, optional != undefined-assignable
+const opts2: Options = {};                   // OK
+const opts3: Options = { debug: true };      // OK
+
+function setDebug(opts: Options, val: boolean | undefined) {
+  opts.debug = val; // Error: 'undefined' not assignable to 'boolean'!
 }
-
-const h = new EventHandler();
-document.addEventListener('click', h.handleClick.bind(h));
-// Works, but TypeScript sometimes infers bind(h) as Function, losing the type
 ```
 
-`.bind()` returns `Function` in some older TypeScript internal typings (< TS 3.2). Show: using an arrow function property instead (`handleClick = (event: MouseEvent) => { ... }`) which captures `this` at class construction, the `Parameters<typeof h.handleClick>` utility when you need the argument types, and ESLint `@typescript-eslint/unbound-method` that warns about unbound method references.""",
-
-"""**Task (Code Generation):**
-Build a `createI18nType<Translations>` that generates fully-typed translation accessor:
-
-```ts
-const translations = {
-  en: {
-    greeting: 'Hello, {{name}}!',
-    'errors.notFound': 'Page not found',
-    'items.count': '{{count}} items',
-  },
-} as const;
-
-const { t } = createI18nType(translations, 'en');
-
-t('greeting', { name: 'Alice' });        // OK: 'Hello, Alice!'
-t('errors.notFound');                    // OK: no variables needed
-t('items.count', { count: 5 });         // OK: requires 'count'
-t('greeting');                           // TypeScript Error: missing 'name'
-t('unknown.key');                        // TypeScript Error: not a valid key
-```
-
-Show: extracting variable names from the string literal type using `infer` and template literals, deriving `Variables<S>` type from the translation string, and the `t` function signature that requires `Variables` to be passed when they exist.""",
-
-"""**Task (Code Generation):**
-Implement a `createTypedRouter<Routes>` for Express with full request/response type safety:
-
-```ts
-type AppRoutes = {
-  'GET /users':           { query: { limit?: number }; response: User[] };
-  'GET /users/:id':       { params: { id: string }; response: User };
-  'POST /users':          { body: CreateUserInput; response: User };
-  'DELETE /users/:id':    { params: { id: string }; response: { deleted: boolean } };
-};
-
-const router = createTypedRouter<AppRoutes>(express.Router());
-
-router.get('/users', async (req, res) => {
-  const limit = req.query.limit; // TypeScript: number | undefined
-  const users = await getUsers(limit);
-  res.json(users); // TypeScript validates: User[]
-});
-
-router.post('/users', async (req, res) => {
-  const input = req.body; // TypeScript: CreateUserInput
-  const user = await createUser(input);
-  res.status(201).json(user); // TypeScript: User
-});
-```
-
-Show: the TypeScript overloads that match the method + path literal to the route definition, typed request and response objects, and Zod middleware for runtime validation of `params`, `query`, and `body` against schemas derived from the TypeScript types.""",
+`exactOptionalPropertyTypes` means `debug?: boolean` = property may be absent, but NOT `debug: undefined`. Show: explicitly widening the type (`debug?: boolean | undefined`), using `delete opts.debug` to remove the property instead of assigning `undefined`, and the use case for `exactOptionalPropertyTypes` (stricter contracts — prevents accidental `undefined` assignments).""",
 
 ]

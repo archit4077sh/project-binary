@@ -1,402 +1,571 @@
 """
-snippets/q_performance.py — BATCH 5: 28 brand-new Performance questions
-Zero overlap with batch1, batch2, batch3, or batch4 archives.
+snippets/q_performance.py — BATCH 6: 56 brand-new Performance questions
+Zero overlap with batches 1-5 archives.
 """
 
 Q_PERFORMANCE = [
 
 """**Task (Code Generation):**
-Implement a `useIdlePreloader` that downloads resources during browser idle time:
+Build a `useResourceHints` hook that injects preconnect/prefetch/preload link hints:
 
 ```ts
-useIdlePreloader({
-  resources: [
-    { type: 'script',  url: '/js/heavy-feature.js',  priority: 'low' },
-    { type: 'image',   url: '/hero-fallback.jpg',     priority: 'high' },
-    { type: 'fetch',   url: '/api/prefetch/catalog',  priority: 'medium' },
-    { type: 'module',  url: '/js/analytics.js',       priority: 'low' },
+useResourceHints({
+  preconnect: ['https://fonts.googleapis.com', 'https://cdn.example.com'],
+  preload: [
+    { href: '/fonts/inter.woff2', as: 'font', type: 'font/woff2', crossOrigin: 'anonymous' },
+    { href: '/hero.jpg', as: 'image' },
   ],
-  maxIdleTime: 50,    // yield if idle callback runs > 50ms
-  onComplete: () => analytics.track('preload_done'),
+  prefetch: ['/api/dashboard', '/js/heavy-feature.js'],
 });
 ```
 
-Show: `requestIdleCallback` with deadline checking (`deadline.timeRemaining() < 5`), priority sorting (high first), `<link rel="preload">` injection for images/scripts, dynamic `import()` for modules, `fetch` with `cache: 'force-cache'` for API resources, and `cancelIdleCallback` on unmount.""",
-
-"""**Debug Scenario:**
-A dashboard page's server response time jumps from 200ms to 4.5s after adding a new "Related Posts" section that fetches from an external content API. The main content renders immediately but waits for the related posts fetch to complete:
-
-```ts
-// app/dashboard/page.tsx:
-const [mainData, relatedPosts] = await Promise.all([
-  getMainData(),
-  getRelatedPosts(), // external API, 4.3s
-]);
-```
-
-The page blocks on `getRelatedPosts()` even though it's non-critical. Show: moving `getRelatedPosts()` into a child Server Component wrapped in `<Suspense>`, showing a skeleton for related posts while the main content streams immediately, and `unstable_noStore()` to prevent caching the slow external call from blocking ISR.""",
+Show: injecting `<link>` elements into `document.head`, deduplication (skip if already injected), cleanup on unmount, and the performance impact comparison (preconnect saves DNS+TCP+TLS, preload forces early fetch, prefetch is low-priority background fetch).""",
 
 """**Task (Code Generation):**
-Build a `createMemoSelector` factory (like Reselect) with automatic invalidation:
+Implement a `createImageOptimizer` service for WebP/AVIF conversion and responsive `srcSet` generation:
 
 ```ts
-const selectFilteredProducts = createMemoSelector(
-  [(state) => state.products, (state) => state.filter],
-  (products, filter) => {
-    // expensive computation:
-    return products.filter(p =>
-      p.category === filter.category && p.price <= filter.maxPrice
-    );
-  }
-);
-
-// Called 1000 times with same state: runs computation only ONCE
-const filtered = selectFilteredProducts(state);
-```
-
-Show: the memoization using a tuple of last inputs + last result, the equality check for each input selector, cache invalidation when any input changes, TypeScript inference of the result type from the result function, and a `createMemoSelectorFamily` for parameterized selectors.""",
-
-"""**Debug Scenario:**
-A TypeScript app imports a large JSON file from the public API definition:
-
-```ts
-import apiSchema from './openapi.json'; // 2.3MB JSON file
-```
-
-Webpack bundles the entire JSON into the main chunk. Show: using `import('./openapi.json')` (dynamic import) to split it into a separate chunk,`fetch('/openapi.json')` at runtime to load it on demand without bundling, configuring Webpack's `Rule.type: 'asset/resource'` to emit the JSON as a separate HTTP-fetched asset, and TypeScript's `resolveJsonModule: false` to prevent type-checking huge JSON files (define an interface manually instead).""",
-
-"""**Task (Code Generation):**
-Implement a `useOffscreenCanvas` hook for CPU-intensive canvas rendering off the main thread:
-
-```ts
-const { canvasRef, postMessage } = useOffscreenCanvas({
-  worker: new URL('./canvas.worker.ts', import.meta.url),
-  init: () => ({ width: 800, height: 600 }),
-  onMessage: (msg) => {
-    if (msg.type === 'frameReady') updateFPS(msg.fps);
-  },
+const optimizer = createImageOptimizer({
+  formats: ['avif', 'webp', 'jpeg'],
+  sizes: [320, 640, 1024, 1920],
+  quality: { avif: 60, webp: 75, jpeg: 85 },
+  placeholderStrategy: 'blurhash',
 });
 
-// Trigger re-render:
-postMessage({ type: 'drawFrame', data: frameData });
-
-<canvas ref={canvasRef} />
+const { src, srcSet, placeholder, sizes } = optimizer.optimize('/photos/hero.jpg');
 ```
 
-Show: `canvas.transferControlToOffscreen()` to transfer the canvas to a Worker, the Worker receiving a `OffscreenCanvas` via `postMessage` with `transferable: [offscreenCanvas]`, TypeScript types for `OffscreenCanvas` (add `lib: ['DOM.Iterable', 'WebWorker']` to tsconfig), and a `resize` handler that posts new dimensions to the worker.""",
-
-"""**Debug Scenario:**
-A React Native app has smooth 60fps rendering in development but drops to 20fps in the production release build. The main difference: development uses the Hermes JS engine in debug mode; production uses Hermes in release mode with stricter GC.
-
-Profiling shows frequent minor GC pauses caused by thousands of short-lived objects created by `items.map(i => ({ ...i, computed: transform(i) }))` in the render function — creating 5,000 new objects on every render.
-
-Show: memoizing the transformation outside render with `useMemo([items])`, using in-place mutation on a stable array ref (read-only views instead of new objects), React Native's Hermes-specific profiling (chrome://inspect DevTools), and the `PureComponent` vs `React.memo` choice for list items in React Native.""",
+Show: generating `srcSet` with `w` descriptors, `<picture>` with `<source type="image/avif">` and `<source type="image/webp">`, blurhash decoding to a CSS `background-image` for the LQIP placeholder, and `decoding="async"` attribute.""",
 
 """**Task (Code Generation):**
-Build a `useLazyWithPreload` hook that extends React.lazy with manual preloading:
+Build a `useParallelWorkers<In, Out>` hook for CPU-intensive work across multiple workers:
 
 ```ts
-const LazyAdminPanel = useLazyWithPreload(() => import('./AdminPanel'));
-
-// Preload on hover (before user clicks):
-<button
-  onClick={() => navigate('/admin')}
-  onMouseEnter={() => LazyAdminPanel.preload()}
->
-  Admin Panel
-</button>
-
-// Standard lazy rendering:
-<Suspense fallback={<Loading />}>
-  <LazyAdminPanel />
-</Suspense>
-```
-
-Show: the hook wrapping `React.lazy` with a side-effectful import call that starts network download, `preload()` storing the Promise so `React.lazy`'s factory reuses the same Promise, TypeScript types for the preloadable component, and a `LazyRoute` wrapper that calls `preload()` automatically when the route link enters the viewport.""",
-
-"""**Debug Scenario:**
-A developer uses `console.time('render')` / `console.timeEnd('render')` to measure a component's render time and gets 0.02ms, but the browser's Performance tab shows ~60ms for the same component path.
-
-`console.time` measures JavaScript execution time ONLY — it doesn't include the browser's layout, paint, and composite phases that happen AFTER the JS completes. Show: using PerformanceObserver for `long-animation-frame` entries (Chrome 123+) that includes JS + rendering phases, the `PerformancePaintTiming` for FCP/LCP, and Chrome DevTools' Performance panel's "Rendering" flamechart for separating JS execution from layout/paint time.""",
-
-"""**Task (Code Generation):**
-Implement a `useRenderBudget` hook that automatically degrades component quality when renders take too long:
-
-```ts
-const { quality, frameTime } = useRenderBudget({
-  budgets: {
-    high:   { maxFrameTime: 8 },   // < 8ms: full quality
-    medium: { maxFrameTime: 16 },  // < 16ms: reduced quality
-    low:    { maxFrameTime: 33 },  // < 33ms: minimal quality
-  },
-  window: 5, // average over last 5 frames
+const { process, isProcessing, progress } = useParallelWorkers<ImageData, ProcessedImage>({
+  workerUrl: '/workers/image-processor.js',
+  poolSize: navigator.hardwareConcurrency ?? 4,
+  taskQueue: images,
+  onResult: (result, index) => setProcessed(prev => { prev[index] = result; }),
 });
 
-// Usage:
-<Chart
-  resolution={quality === 'high' ? 1000 : quality === 'medium' ? 500 : 100}
-  animations={quality === 'high'}
-/>
+await process(imageDataArray);
 ```
 
-Show: measuring frame time with `performance.now()` between `requestAnimationFrame` calls, rolling average over the last N frames, gradual quality degradation (hysteresis: require 3 consecutive good frames before upgrading quality), and auto-reset on inactivity.""",
-
-"""**Debug Scenario:**
-A Next.js API route that processes image uploads starts throwing `out of memory` errors in production after 10 days of running. Memory steadily grows and never decreases.
-
-Investigation reveals the route reads uploaded images with `fs.readFileSync` into a `Buffer` that's stored in a module-level `Map` as a "processing cache":
-
-```ts
-const processingCache = new Map<string, Buffer>(); // never cleared!
-```
-
-Show: implementing TTL-based cache eviction (delete entries after 5 minutes using `setTimeout`), using streams (`fs.createReadStream`) instead of reading entire files into memory, `sharp`'s streaming API for image processing, and monitoring memory with `process.memoryUsage()` in a health endpoint.""",
+Show: creating a pool of `Worker` instances, distributing tasks via a FIFO work queue (idle workers pick up tasks), `Transferable` objects for zero-copy image data transfer, progress tracking, and cleanup terminating all workers on unmount.""",
 
 """**Task (Code Generation):**
-Build a `useConnectionAwareQuality` hook that adapts media quality to network conditions:
+Implement a `createStreamingJSONParser` for processing large API responses without blocking the main thread:
 
 ```ts
-const { videoQuality, imageQuality, shouldDisableAnimations } =
-  useConnectionAwareQuality({
-    qualities: {
-      '4g':   { video: '1080p', image: 'full',    animations: true },
-      '3g':   { video: '480p',  image: 'medium',  animations: true },
-      '2g':   { video: null,    image: 'low',     animations: false },
-      offline:{ video: null,    image: 'cached',  animations: false },
+const parser = createStreamingJSONParser<Product>({
+  arrayPath: 'data.products',
+  onItem: (product) => addToUI(product),
+  onComplete: (total) => setLoading(false),
+  chunkSize: 16_384,
+});
+
+const response = await fetch('/api/products/export');
+await parser.parse(response.body!);
+```
+
+Show: reading the `ReadableStream` via `getReader()`, accumulating bytes and splitting on object delimiters, parsing each completed JSON object, yielding between chunks using `queueMicrotask`, and a `TransformStream`-based implementation as an alternative.""",
+
+"""**Task (Code Generation):**
+Build a `useAdaptiveLoading` hook that adjusts content quality based on device capability:
+
+```ts
+const { tier, shouldLoadVideos, imageQuality, animationEnabled } =
+  useAdaptiveLoading({
+    tiers: {
+      high:   { minRam: 4, minCores: 4, connection: '4g' },
+      medium: { minRam: 2, minCores: 2, connection: '3g' },
+      low:    {},
     },
   });
 ```
 
-Show: `navigator.connection.effectiveType` and `navigator.connection.downlink`, the `change` event on `navigator.connection` for real-time updates, `navigator.onLine` + `online`/`offline` events for connectivity state, the `saves-data` check (`navigator.connection.saveData`), and `@media (prefers-reduced-data)` CSS alternative.""",
+Show: reading `navigator.deviceMemory`, `navigator.hardwareConcurrency`, `navigator.connection.effectiveType`, `window.matchMedia('(prefers-reduced-motion: reduce)').matches`, the tier scoring algorithm, and `SessionStorage` persistence.""",
 
-"""**Debug Scenario:**
-A Node.js server handling server-side rendering creates a new `Intl.DateTimeFormat` object for every request to format dates, contributing to high CPU usage under load:
+"""**Task (Code Generation):**
+Implement a `useProfiledRender` hook that measures component render performance in production:
 
 ```ts
-export function formatDate(date: Date, locale: string): string {
-  return new Intl.DateTimeFormat(locale, {
-    year: 'numeric', month: 'long', day: 'numeric'
-  }).format(date); // new object per call
+function HeavyComponent() {
+  const { startMark, endMark } = useProfiledRender('HeavyComponent', {
+    sampleRate: 0.1,
+    slowThreshold: 16,
+    onSlowRender: (duration) => metrics.record('slow_render', { duration }),
+  });
+  startMark();
+  const result = expensiveComputation();
+  endMark();
+  return <div>{result}</div>;
 }
 ```
 
-`Intl.DateTimeFormat` construction is expensive. Show: caching `Intl.DateTimeFormat` instances by locale + options key using a `Map` (module-level, survives across requests), the LRU eviction for the cache (bounded at 100 entries), and benchmarking before/after with `node:perf_hooks`' `PerformanceObserver`.""",
+Show: `performance.mark()` and `performance.measure()` APIs, sampling via `Math.random() < sampleRate`, reading the measure duration from `PerformanceObserver`, and a production-safe approach that skips measurement when `sampleRate` doesn't pass.""",
 
 """**Task (Code Generation):**
-Implement a `<ProgressiveImage>` component that shows a blurred placeholder while the full image loads:
+Build a `createBundleAnalyzer` Vite plugin that enforces bundle size budgets in CI:
+
+```ts
+createBundleAnalyzer({
+  budgets: {
+    'main':         { maxKB: 150 },
+    'vendor-react': { maxKB: 50 },
+    'features/*':   { maxKB: 30 },
+  },
+  reporter: 'html',
+  failOnExceed: true,
+  compareWithBaseline: './bundle-baseline.json',
+})
+```
+
+Show: the Vite plugin's `generateBundle` hook reading chunk sizes, comparing with budgets, glob pattern matching for chunk names, generating a baseline JSON on first run, and the delta comparison reporting size change vs last baseline.""",
+
+"""**Task (Code Generation):**
+Implement a `usePageTransitionProgress` hook that tracks Core Web Vitals for analytics:
+
+```ts
+const { ttfb, fcp, lcp, cls, fid } = usePageTransitionProgress({
+  onMetric: (metric) => analytics.track('web_vital', {
+    name: metric.name,
+    value: metric.value,
+    rating: metric.rating,
+  }),
+});
+```
+
+Show: using the `web-vitals` library, `PerformanceObserver` for LCP and CLS, `PerformanceNavigationTiming` for TTFB, the `rating` thresholds (LCP good ≤2.5s, needs-improvement ≤4s, poor >4s), and attributing CLS to specific layout-shifting elements via `sources`.""",
+
+"""**Task (Code Generation):**
+Build a `useRequestDeduplicator<T>` that prevents concurrent duplicate HTTP requests:
+
+```ts
+const { get, invalidate } = useRequestDeduplicator({ cache: new Map(), maxAge: 5_000 });
+
+// 50 simultaneous calls with the same key → 1 actual HTTP request:
+const [u1, u2, u3] = await Promise.all([
+  get('/api/user/1', fetchUser),
+  get('/api/user/1', fetchUser),
+  get('/api/user/1', fetchUser),
+]);
+```
+
+Show: storing in-flight Promises by URL key (concurrent requests share one Promise), storing the resolved result for the `maxAge` period, `invalidate(url)` for cache busting, and TypeScript generics inferring return type from the fetcher function.""",
+
+"""**Task (Code Generation):**
+Build a `useIncrementalSearch<T>` hook that searches a large offline dataset without blocking the UI:
+
+```ts
+const { results, isSearching, cancel } = useIncrementalSearch({
+  dataset: allProducts,     // 50,000 items
+  searchFn: (q, item) => item.name.toLowerCase().includes(q),
+  chunkSize: 500,
+  maxResults: 50,
+  debounce: 200,
+});
+```
+
+Show: chunked processing using `requestIdleCallback`, early termination when `maxResults` is reached, cancelling the current search when the query changes (via a generation counter), updating `results` incrementally as each chunk completes, and Web Worker alternative for true parallelism.""",
+
+"""**Task (Code Generation):**
+Implement a `usePersistentSWR<T>` hook combining SWR with IndexedDB persistence:
+
+```ts
+const { data, error, isLoading } = usePersistentSWR<DashboardData>(
+  '/api/dashboard',
+  fetcher,
+  {
+    persistKey: 'dashboard-v2',
+    maxAge: 24 * 60 * 60 * 1000,
+    serialize: JSON.stringify,
+    deserialize: JSON.parse,
+  }
+);
+// Shows persisted data immediately, fetches fresh data in background
+```
+
+Show: reading from IndexedDB as initial data, writing to IndexedDB on successful fetch in `onSuccess`, a `maxAge` check on cached data, and the `idb` library for IndexedDB interaction.""",
+
+"""**Task (Code Generation):**
+Implement a `useMemoryPressureMonitor` hook that reacts to device memory pressure:
+
+```ts
+const { tier, pressure } = useMemoryPressureMonitor({
+  onHighPressure: () => {
+    clearImageCache();
+    disableAnimations();
+  },
+  onLowPressure: () => restoreFeatures(),
+  pollInterval: 10_000,
+});
+```
+
+Show: the `performance.memory` API (Chrome-only: `usedJSHeapSize` / `jsHeapSizeLimit`), percentage thresholds (>80% = high pressure), `navigator.deviceMemory` for device RAM tier, and `FinalizationRegistry` for tracking when large objects are GC'd.""",
+
+"""**Task (Code Generation):**
+Build a `useNetworkQueueManager` that batches and prioritizes API requests:
+
+```ts
+const { enqueue, flush, queueLength } = useNetworkQueueManager({
+  maxConcurrent: 4,
+  priorityLevels: ['critical', 'high', 'normal', 'low'],
+  deduplicateKey: (req) => `${req.method}:${req.url}`,
+  retryOnFailure: 2,
+});
+
+enqueue({ url: '/api/save', method: 'POST', body: draft, priority: 'high' });
+enqueue({ url: '/api/analytics', method: 'POST', body: event, priority: 'low' });
+```
+
+Show: the priority queue using multiple `Array<Request>` queues, a concurrency limiter (at most N in-flight requests), deduplication by key, retry scheduling, and pausing/flushing the queue based on `navigator.onLine`.""",
+
+"""**Task (Code Generation):**
+Build a `createVirtualScroller` for efficiently rendering millions of items as a flat list:
+
+```ts
+const scroller = createVirtualScroller({
+  containerHeight: 600,
+  itemHeight: (index) => index % 5 === 0 ? 80 : 48,  // variable heights
+  totalItems: 2_000_000,
+  renderItem: (index, style) => <Row key={index} style={style} data={data[index]} />,
+  overscan: 5,
+  onVisibleRangeChange: (start, end) => prefetchRange(start, end),
+});
+```
+
+Show: computing cumulative height offsets for variable heights (binary search for visible range), the `onScroll` handler that updates `startIndex` and `endIndex`, absolute positioning of items, a `useVirtualScroller` React hook wrapping the imperative class, and dynamic item height measurement via `ResizeObserver`.""",
+
+"""**Debug Scenario:**
+A React app's Time to Interactive (TTI) is 8.8 seconds on 4G mobile. Lighthouse shows a 2.2MB JavaScript payload. A charting library (800KB) and 3D library (600KB) are in the main bundle but are only used on the Analytics page.
+
+Show: dynamic import of both libraries inside the Analytics page component, code splitting via Webpack magic comments, `React.lazy` + `Suspense` wrapping of `<AnalyticsPage>`, and Vite's `rollupOptions.output.manualChunks` to separate these into named chunks.""",
+
+"""**Debug Scenario:**
+A Next.js app using `next/image` shows LCP of 4.2s. The hero image has default `loading="lazy"` which defers image discovery.
+
+`loading="lazy"` defers the image fetch until near viewport, but the hero IS visible at initial load. Show: adding `priority` prop to the hero `next/image` which adds `rel="preload"`, `loading="eager"`, and `fetchpriority="high"` on the underlying `<img>`, and why only ONE image per page should receive `priority`.""",
+
+"""**Debug Scenario:**
+A Node.js Express API serving SSR pages has memory growing to 4GB after 2 hours:
+
+```ts
+const requestLog = new Map(); // module-level, never cleared
+
+app.use((req, res, next) => {
+  requestLog.set(req.id, { body: req.body, timestamp: Date.now() });
+  next();
+});
+```
+
+Show: removing the module-level accumulator, using a TTL-based cache that expires entries, `WeakMap` for request-keyed data that GC's automatically, and `node --inspect` + Chrome DevTools memory profiling to find heap retainers.""",
+
+"""**Debug Scenario:**
+A React component's `useEffect` makes 15 sequential API calls, causing a 12-second load on 3G:
+
+```ts
+useEffect(async () => {
+  const user = await fetchUser();
+  const orders = await fetchOrders(user.id);
+  const products = await fetchProducts(); // waits for orders!
+  const categories = await fetchCategories(); // waits for products!
+}, []);
+```
+
+Show: grouping independent parallel calls with `Promise.all`, then fan-out for user-dependent data, and measuring the time savings (serial: sum of all calls; parallel: max of independent group + dependent calls).""",
+
+"""**Debug Scenario:**
+A Vite app's HMR takes 8 seconds per save because a custom plugin runs `eslint` synchronously in `transform`:
+
+```ts
+plugins: [{
+  name: 'eslint-on-save',
+  transform(code, id) {
+    runEslintSync(id); // blocks HMR!
+    return null;
+  },
+}]
+```
+
+Show: removing the blocking `transform` hook, moving ESLint to `vite-plugin-eslint` running asynchronously, using `eslint --cache` to only lint changed files, and `vite-plugin-checker` running type-checking and linting in a separate thread.""",
+
+"""**Debug Scenario:**
+A product page has CLS of 0.35 (poor). A banner ad loads after 1.5s and pushes content down 90px.
+
+Show: pre-reserving space for the ad with `min-height: 90px` on the ad container, `content-visibility: auto` for off-screen sections, lazy-loading images with explicit `width` and `height` attributes, and the CLS contribution formula (`impact_fraction × distance_fraction`).""",
+
+"""**Debug Scenario:**
+A table with 5,000 rows renders in 800ms. `React.memo` doesn't help because the `columns` prop is defined inline:
 
 ```tsx
-<ProgressiveImage
-  src="/photos/mountain.jpg"
-  lqip="/photos/mountain-lqip.jpg" // or base64 data URL
-  alt="Mountain landscape"
-  aspectRatio="16/9"
-  onLoad={() => analytics.track('hero_image_loaded')}
-/>
+const columns = [{ key: 'name', label: 'Name' }, ...]; // new array each render
+const MemoizedTable = React.memo(DataTable);
+// Still 800ms because columns is a new reference every render
 ```
 
-Show: loading the full image in a hidden `new Image()` JavaScript object, swapping `src` only after JS-native load completes (smooth transition), CSS `filter: blur(20px)` on the LQIP with `transform: scale(1.05)` to hide blur edges, `aspect-ratio` CSS to prevent layout shift before image loads, and the `loading="lazy"` + IntersectionObserver fallback for native lazy loading.""",
+Show: moving `columns` outside the component or wrapping with `useMemo`, virtualizing rows using `react-window` or `@tanstack/virtual`, and `React.memo` on row components.""",
 
 """**Debug Scenario:**
-A developer uses `React.lazy` + Webpack to split code by route, but `vite build --analyze` shows the `vendor` chunk is 1.8MB because React, lodash-es, and framer-motion are all in one chunk:
+A rich-text editor calls `localStorage.setItem()` on every keystroke, causing UI lag after 500 keystrokes:
 
 ```ts
-// vite.config.ts
-build: {
-  rollupOptions: {
-    output: {
-      manualChunks: undefined // default: vendor chunk strategy
-    }
-  }
+editor.on('change', (content) => {
+  localStorage.setItem('draft', JSON.stringify(content)); // blocks every keystroke
+});
+```
+
+`localStorage.setItem` is synchronous and blocks the main thread. Show: debouncing saves to 1s after last keystroke, switching to `IndexedDB` (async, non-blocking), and `scheduler.postTask()` with `background` priority.""",
+
+"""**Debug Scenario:**
+Google Fonts are blocking render — showing in Lighthouse's render-blocking resources:
+
+```html
+<link href="https://fonts.googleapis.com/css2?family=Inter&display=swap" rel="stylesheet">
+```
+
+Show: using `rel="preconnect"` for the font domain, loading the stylesheet as `rel="preload"` then switching to `stylesheet` (`onload="this.rel='stylesheet'"`), `font-display: swap` to show a fallback font immediately, and self-hosting fonts to avoid the third-party round-trip.""",
+
+"""**Debug Scenario:**
+Webpack build takes 3 minutes. `speed-measure-webpack-plugin` shows `babel-loader` takes 95s and `ts-loader` 45s.
+
+Show: replacing `babel-loader` + `ts-loader` with `swc-loader` (Rust-based, 10-20x faster), enabling persistent caching (`cache: { type: 'filesystem' }`), splitting TypeScript type checking to `fork-ts-checker-webpack-plugin`, and upgrading to Next.js 13+ which uses Turbopack.""",
+
+"""**Debug Scenario:**
+500 components re-render when `notificationCount` updates because it's read from top-level state:
+
+```tsx
+function App() {
+  const { notificationCount } = useAppStore(); // triggers root re-render → all 500 children
+  return <Router>...</Router>;
 }
 ```
 
-Show: custom `manualChunks` that splits React into its own chunk (cached long-term), framer-motion into a separate animation chunk (only loaded on pages that animate), and the `splitVendorChunkPlugin` approach versus manual configuration, with before/after bundle size comparison.""",
+Show: moving `notificationCount` to a localized `NotificationContext` consumed only by `<NotificationBell>`, `React.memo` on subtree roots, and Zustand's per-selector subscription (components only re-render when their specific slice changes).""",
 
-"""**Task (Code Generation):**
-Build a `useRAFState<T>` hook that batches state updates to animation frames (prevents over-rendering from rapid events):
+"""**Debug Scenario:**
+Production logs show "Script error." without stack traces for errors in CDN-hosted chunks:
+
+```
+Uncaught Error: Script error. (at https://cdn.example.com/chunk-abc.js:1)
+```
+
+Browser security blocks cross-origin error details without CORS. Show: adding `crossorigin="anonymous"` to `<script>` tags, configuring the CDN to send `Access-Control-Allow-Origin: *` on JS files, setting up Sentry with source maps, and `errorBoundary.getDerivedStateFromError` for React rendering errors.""",
+
+"""**Debug Scenario:**
+Every `MouseMove` triggers a full React re-render of 500 child components:
+
+```tsx
+function DraggablePanel() {
+  const [pos, setPos] = useState({ x: 0, y: 0 });
+  return (
+    <div onMouseMove={(e) => setPos({ x: e.clientX, y: e.clientY })}>
+      {/* 500 children re-render on every mouse move */}
+    </div>
+  );
+}
+```
+
+Show: moving `pos` to a `useRef` and applying transform directly to the DOM element (no re-render), using `requestAnimationFrame` to throttle DOM updates, and `React.memo` on children.""",
+
+"""**Debug Scenario:**
+A Next.js Pages Router page using `getServerSideProps` has P99 latency of 12 seconds — the DB query runs a table scan on a 1M-row table:
 
 ```ts
-const [scrollPos, setScrollPos] = useRAFState({ x: 0, y: 0 });
+await db.query('SELECT * FROM products WHERE slug = $1', [params.slug]);
+// No index on slug — O(n) scan!
+```
 
+Show: adding a B-tree index on `slug` (`CREATE INDEX CONCURRENTLY`), using `EXPLAIN ANALYZE` to verify the query plan, Prisma's `@@index([slug])` equivalent, query timeout middleware (fail fast after 2s), and serving a cached version while the query times out.""",
+
+"""**Debug Scenario:**
+React Query refetches data every mount because `staleTime` is not configured:
+
+```ts
+const { data } = useQuery({
+  queryKey: ['user', id],
+  queryFn: () => fetchUser(id),
+  // staleTime defaults to 0 — data stale immediately
+});
+```
+
+Show: setting `staleTime: 5 * 60 * 1000` (5 minutes), the global default override in `QueryClient`, the difference between `staleTime` (when to background-refetch) and `gcTime` (when to remove from cache), and `refetchOnMount: false` for static data.""",
+
+"""**Debug Scenario:**
+A CSS `transform`-only animation causes `Paint` events on every frame in Chrome DevTools:
+
+```css
+.moving-element { animation: slide 2s ease infinite; }
+@keyframes slide { from { transform: translateX(0); } to { transform: translateX(100vw); } }
+```
+
+A sibling with high `z-index` forces the browser to repaint the whole stacking context. Show: promoting the animated element to its own layer with `will-change: transform`, isolating it with `isolation: isolate`, checking the DevTools Layers panel to confirm compositing, and measuring FPS before/after.""",
+
+"""**Debug Scenario:**
+An API endpoint serializing a 50MB response takes 2.3 seconds in `JSON.stringify`:
+
+```ts
+app.get('/api/catalog/all', async (req, res) => {
+  const catalog = await db.products.findMany(); // 200,000 rows
+  res.json(catalog); // JSON.stringify of 200K objects — 2.3s!
+});
+```
+
+Show: streaming the response using `res.write('[')` + iterating rows while writing JSON chunks + `res.end(']')`, using a JSON streaming library, enabling gzip compression, and paginating the endpoint instead of fetching all rows at once.""",
+
+"""**Debug Scenario:**
+A Vite dev server takes 45 seconds to start because it's pre-bundling 3,000 node_modules:
+
+Show: Vite's pre-bundling cache location (`.vite/deps/`), adding large infrequently-changed packages to `optimizeDeps.include`, excluding rarely-used packages with `optimizeDeps.exclude`, configuring `server.warmup.clientFiles` to pre-transform entry files, and the hardware impact of NVMe SSD vs HDD for file I/O.""",
+
+"""**Debug Scenario:**
+A `<textarea>` becomes janky because `useEffect` runs a 50ms text analysis on every keystroke:
+
+```tsx
 useEffect(() => {
-  const handler = () => setScrollPos({ x: window.scrollX, y: window.scrollY });
-  window.addEventListener('scroll', handler, { passive: true });
-  return () => window.removeEventListener('scroll', handler);
-}, []);
-// Even though scroll fires 60+ times/sec, state updates are batched to one per frame
+  const result = analyzeText(text); // 50ms computation
+  setAnalysis(result);
+}, [text]); // every keystroke blocks main thread
 ```
 
-Show: the rAF-batched state update (cancel pending frame, request new frame that calls the real `setState`), the `useCallback` wrapper so `setScrollPos` is stable, and the cleanup with `cancelAnimationFrame` in the hook's `useEffect` return.""",
+Show: debouncing the analysis with `useDebounce(text, 300)`, moving `analyzeText` to a Web Worker, and `useDeferredValue(text)` which defers the analysis update (keeping text input responsive).""",
 
 """**Debug Scenario:**
-A production server renders 50 requests per second. After adding `getServerSideProps` that loads translations from a YAML file using `js-yaml`, CPU spikes to 95%. Each request reads and parses a 200KB YAML file from disk:
+Mobile FCP is 5.2 seconds because the CSS file is 800KB (uncompressed):
+
+```html
+<link rel="stylesheet" href="/styles/main.css" />
+<!-- 800KB — all styles for all pages loaded upfront -->
+```
+
+Show: analyzing unused CSS with PurgeCSS or DevTools Coverage panel, critical CSS inlining (first-paint styles in `<style>` tag, rest deferred), enabling Brotli compression (compresses CSS ~80%), and checking that the server sends `Content-Encoding: br` header.""",
+
+"""**Debug Scenario:**
+A Next.js page with `revalidate = 60` does not revalidate after deployment — old content serves for hours:
 
 ```ts
-export async function getServerSideProps(ctx) {
-  const translations = yaml.load(fs.readFileSync('./i18n/en.yaml', 'utf8'));
-  return { props: { translations } };
+export const revalidate = 60;
+export default async function Page() { ... }
+```
+
+The CDN caches the static HTML indefinitely with `Cache-Control: immutable`. Show: configuring the CDN to respect `Cache-Control: s-maxage=60, stale-while-revalidate`, disabling CDN/edge caching for ISR routes, and using `unstable_cache` with `revalidate` for fetch-level caching.""",
+
+"""**Debug Scenario:**
+A GraphQL resolver has an N+1 problem — each blog post fetches its author in a separate DB query:
+
+```ts
+Post: {
+  author: (post) => db.users.findUnique({ where: { id: post.authorId } })
+  // For 50 posts: 50 separate DB queries!
 }
 ```
 
-Show: parsing YAML once at server startup (module-level `const`), caching the parsed result in memory, serving it reference-only per request, handling hot-reload in development (watch the file with `fs.watch`), and converting YAML to JSON at build time for instant `require('./i18n/en.json')` (JSON.parse is 10x faster than YAML parse).""",
-
-"""**Task (Code Generation):**
-Implement a `useDebouncedQuery` hook that prevents redundant API calls while typing:
-
-```ts
-const { data, isLoading, debouncedQuery, cancelPending } = useDebouncedQuery({
-  query,
-  fetcher: (q) => api.search(q),
-  debounce: 350,
-  minLength: 2,       // don't fetch for very short queries
-  deduplicate: true,  // skip fetch if query equals last successfully fetched query
-  onError: (err) => toast.error('Search failed'),
-});
-```
-
-Show: the debounce with `useRef`-held timer ID, the deduplication check (store last fetched query), cancellation of in-flight requests using `AbortController`, the `cancelPending()` function exposed to allow imperative cancellation, and TypeScript generic for the return data type.""",
+Show: implementing DataLoader with a `batchLoadFn` (all user IDs fetched in one `WHERE id IN (...)`) query, DataLoader's automatic batching per tick, per-request DataLoader instantiation, and the `@dataloader` schema directive for automatic generation.""",
 
 """**Debug Scenario:**
-A web app built with Vite has a 3.2MB JavaScript bundle after `vite build`. Analysis shows `@sentry/browser` (500KB), `@aws-sdk/client-s3` (800KB), and `pdf-lib` (600KB) are all imported in the main entry file even though they're only used in specific features.
+React 18 concurrent mode shows "tearing" — components display inconsistent values from the same external store during a transition.
 
-Show: moving Sentry initialization to a separate entry point loaded only in production (`import('./sentry-init').then(m => m.initSentry())`), lazy-loading the S3 client (`const { S3Client } = await import('@aws-sdk/client-s3')`) only when the upload feature is used, and making `pdf-lib` a separate chunk that's only downloaded when the user clicks "Export PDF", with bundle size validation in CI using `vite-bundle-visualizer`.""",
-
-"""**Task (Code Generation):**
-Build a `usePollingWithBackoff` hook that polls an API and slows down when errors occur:
-
-```ts
-const { data, status, resetBackoff } = usePollingWithBackoff({
-  fetcher: () => api.getJobStatus(jobId),
-  interval: 2000,
-  backoff: {
-    strategy: 'exponential',
-    maxInterval: 30_000, // max 30s between polls after errors
-    jitter: true,        // ± 20% jitter to spread load
-  },
-  stopWhen: (data) => data.status === 'complete' || data.status === 'failed',
-  onComplete: (data) => handleJobComplete(data),
-});
-```
-
-Show: `setInterval`-based polling, the exponential backoff multiplier on error, jitter calculation (`interval * (0.8 + Math.random() * 0.4)`), `stopWhen` predicate, cleanup on unmount, and `resetBackoff()` that clears error count and resets to initial interval.""",
+React 18 can pause and resume rendering, reading external stores at different points in time. Show: migrating from `useState` to `useSyncExternalStore`, the `getSnapshot` function (must return the same reference if data hasn't changed), and why built-in React state doesn't tear but external mutable stores do.""",
 
 """**Debug Scenario:**
-A Next.js 14 app using the App Router has every page as a Client Component (`'use client'`) because the team was unsure about Server vs Client Component boundaries. Lighthouse scores show 4.2MB of JavaScript on the network.
-
-The team wants to migrate to Server Components. Show: identifying components that use `useState`, `useEffect`, `onClick` (must remain Client Components), components that only fetch data and render (can be Server Components), the "leaves of the tree" pattern (push `'use client'` as close to the browser-interactive parts as possible), using `<Suspense>` to stream server-rendered data, and expected JS bundle reduction after migration.""",
-
-"""**Task (Code Generation):**
-Implement a `WeakCache<K extends object, V>` that doesn't prevent garbage collection of its keys:
+An IntersectionObserver for lazy-loading images loads all images immediately on page load:
 
 ```ts
-const cache = new WeakCache<Request, Response>({
-  compute: async (req) => {
-    return new Response(await generateContent(req));
-  },
+const observer = new IntersectionObserver((entries) => {
+  entries.forEach(entry => {
+    if (entry.isIntersecting) loadImage(entry.target);
+  });
 });
-
-const res1 = await cache.get(requestObject);
-const res2 = await cache.get(requestObject); // cached
-// When requestObject is GC'd, the cached Response is also GC'd automatically
+// All 100 images observed — all trigger isIntersecting: true on first callback!
 ```
 
-Show: `WeakMap`-based storage (keys are objects, GC'd when no other references exist), the `compute` factory for cache misses, handling concurrent requests for the same key (deduplicate with a `Map<K, Promise<V>>` of in-flight Promises), and `FinalizationRegistry` to track when keys are collected (for cache hit-rate logging).""",
+All images are marked as intersecting on first observe if the page is short. Show: checking the initial `isIntersecting` on first observe, using `threshold: 0.01`, setting `rootMargin: '200px'` to pre-load within 200px, and `disconnect()` or `unobserve()` after loading each image.""",
 
 """**Debug Scenario:**
-An e-commerce site's product listing page has a 95th-percentile server response time of 8 seconds. The median is 180ms. Investigation shows the slow responses correlate exactly with database cold connections — the connection pool is exhausted during traffic spikes.
+`useMemo` always recomputes because `activeFilters` (array from props) is a new reference every render:
 
 ```ts
-const pool = new Pool({ max: 10 }); // only 10 concurrent connections
-```
-
-Show: increasing pool max with a guard (`max: Math.min(50, os.cpus().length * 5)`), implementing a queue for requests waiting for a connection (with timeout), adding `pool.on('connect')` and `pool.on('remove')` logging to measure pool pressure, using PgBouncer for transaction-mode pooling (allows thousands of Node connections to share 10 actual DB connections), and monitoring with `pool.totalCount`, `pool.idleCount`, `pool.waitingCount`.""",
-
-"""**Task (Code Generation):**
-Build a `useHydrationMismatch` debug hook that detects and logs server/client render differences in development:
-
-```ts
-// Development only:
-useHydrationMismatch(componentName, {
-  serverValue: serverRenderedContent,
-  tolerance: 'whitespace', // ignore whitespace-only differences
-  onMismatch: (diff) => {
-    console.error(`[Hydration] ${componentName} mismatch:`, diff);
-    reportToErrorTracking(diff);
-  },
-});
-```
-
-Show: comparing server-rendered HTML (`innerHTML` of a ref) with client-rendered output after hydration, the `useEffect` (client-only) that checks for differences, the tolerance modes (`exact`, `whitespace`, `attributes-only`), disabling in production (`process.env.NODE_ENV !== 'development'`), and using `MutationObserver` to detect DOM changes during hydration.""",
-
-"""**Debug Scenario:**
-A React app's bundle includes multiple copies of the same package. Running `npm ls react` shows:
-
-```
-my-app@1.0.0
-├── react@18.2.0
-└── my-component-lib@2.1.0
-    └── react@17.0.2 ← second copy!
-```
-
-Two versions of React are bundled, causing "Invalid hook call" errors. Show: using Webpack's `resolve.alias` to force a single React version (`{ 'react': path.resolve('./node_modules/react') }`), fixing the root cause by adding React as a peer dependency in `my-component-lib` (not a direct dependency), running `npm dedupe` to flatten the dependency tree, and detecting the issue earlier with `npm-why react` and `duplicate-package-checker-webpack-plugin`.""",
-
-"""**Task (Code Generation):**
-Implement a `useFPS` hook that measures real-time frame rate and triggers callbacks on drops:
-
-```ts
-const { fps, avgFps, isDropping } = useFPS({
-  sampleWindow: 60,           // average over last 60 frames
-  dropThreshold: 45,          // fps below 45 = dropping
-  onDrop: (fps) => {
-    analytics.track('fps_drop', { fps });
-    reduceQuality();
-  },
-  onRecover: () => restoreQuality(),
-});
-```
-
-Show: the `requestAnimationFrame` loop that measures `1000 / (thisTimestamp - lastTimestamp)`, a circular buffer of the last N frame times for rolling average, the drop detection with hysteresis (require 3 consecutive drops before triggering), cleanup with `cancelAnimationFrame` on unmount, and displaying the FPS counter only in dev mode.""",
-
-"""**Debug Scenario:**
-A developer profiles a React app and finds that `useMemo` calls in their component are actually SLOWER than not memoizing. A component memoizes a simple string concatenation:
-
-```ts
-const displayName = useMemo(
-  () => `${user.firstName} ${user.lastName}`,
-  [user.firstName, user.lastName]
+const filteredItems = useMemo(
+  () => items.filter(item => activeFilters.includes(item.category)),
+  [items, activeFilters] // activeFilters: new array every parent render
 );
 ```
 
-`useMemo` has overhead: dependency comparison + potential cache hit check on every render. For trivial computations (< 0.1ms), `useMemo` overhead (dependency array allocation, equality checks) exceeds the computation cost.
-
-Show: the guidelines for when `useMemo` is worth it (computation > 1ms, or a stable reference needed by a downstream `React.memo`/`useMemo`/`useEffect`), removing `useMemo` for simple derived values, and using `React.memo` on the consumer instead if the real goal is preventing re-renders.""",
-
-"""**Task (Code Generation):**
-Build a `createSharedWorkerState<T>` for sharing state between multiple browser tabs without a server:
-
-```ts
-const [state, setState] = createSharedWorkerState('app-state', {
-  initialState: { theme: 'light', notifications: [] },
-  reducer: (state, action) => {
-    switch (action.type) {
-      case 'SET_THEME': return { ...state, theme: action.theme };
-      case 'ADD_NOTIFICATION': return { ...state, notifications: [...state.notifications, action.notification] };
-    }
-  },
-});
-
-// In any tab:
-setState({ type: 'SET_THEME', theme: 'dark' }); // updates ALL tabs instantly
-```
-
-Show: `SharedWorker` setup (one worker shared across all tabs), the worker receiving actions and broadcasting updated state to all connected ports, `localStorage` as a fallback when `SharedWorker` isn't supported, and React hook integration with `useSyncExternalStore`.""",
+Parent does: `<ProductList activeFilters={selectedCategories.filter(Boolean)} />` — `filter` creates a new array every render. Show: stabilizing in parent with `useMemo`, using a stringified comparison key as the dep, and `shallowEqual` as a custom dep comparison.""",
 
 """**Debug Scenario:**
-A Node.js HTTP server has a consistent 50ms tail-latency spike every 30 seconds. Application metrics show no database queries or external API calls during those spikes — the event loop is simply blocked.
+A Next.js API route for PDF generation times out because `puppeteer` launches a new browser per request:
 
-Investigation with `--prof` V8 profiler and `node --perf-basic-prof` reveals a `setInterval(() => compactLocalCache(), 30_000)` call that synchronously iterates 50,000 Map entries to evict stale entries — blocking the event loop for 48ms.
+```ts
+export async function POST(req: Request) {
+  const browser = await puppeteer.launch(); // ~5s cold start each time
+  const page = await browser.newPage();
+  const pdf = await page.pdf({ format: 'A4' });
+  await browser.close();
+  return new Response(pdf);
+}
+```
 
-Show: moving the eviction to a background process using `worker_threads`, chunking the eviction into micro-tasks (`setImmediate` to yield between chunks), using a more efficient data structure (`DoublyLinkedList` + `Map` for O(1) LRU eviction instead of O(n) iteration), and `perf_hooks.monitorEventLoopDelay()` to measure event loop lag in production.""",
+Show: creating a shared browser instance at module level that persists across requests, using `browser.newPage()` per request, graceful reconnection if the browser crashes, and `puppeteer-cluster` for automatic page pool management with concurrency limits.""",
+
+"""**Debug Scenario:**
+A React component has `useCallback` with empty deps but the function still reads stale state:
+
+```ts
+const handleSave = useCallback(async () => {
+  await api.save(formData); // formData is always the initial value!
+}, []); // empty deps — stale closure
+```
+
+`formData` is captured at the time `useCallback` was first called and never updated. Show: adding `formData` to the deps array, using a `useRef` to hold the latest `formData` (`formDataRef.current = formData`) and reading `formDataRef.current` inside the callback, and the `useEventCallback` pattern from stable-refs.""",
+
+"""**Debug Scenario:**
+A production Next.js app suddenly shows much slower TTFB (1.2s instead of 80ms) after a dependency update. The hot path is hitting `bcrypt.hash()` on every request:
+
+```ts
+export async function middleware(req: NextRequest) {
+  const token = req.headers.get('authorization');
+  const isValid = await verifyToken(token); // calls bcrypt.compare internally!
+}
+```
+
+Middleware runs on EVERY request. `bcrypt.compare` is intentionally slow (10+ rounds). Show: switching to a fast HMAC signature verification (`crypto.timingSafeEqual` with SHA-256) for token validation in middleware, keeping bcrypt only for password hashing at login-time, and the security trade-off (bcrypt for passwords, HMAC for session tokens).""",
+
+"""**Debug Scenario:**
+A developer finds that `React.Suspense` causes their app to flash a loading spinner briefly when switching between pre-loaded routes:
+
+```tsx
+<Suspense fallback={<PageSpinner />}>
+  <Routes>
+    <Route path="/home" element={<HomePage />} />
+    <Route path="/about" element={<AboutPage />} />
+  </Routes>
+</Suspense>
+```
+
+Even though data is cached, React temporarily shows the `fallback` during the transition render. Show: wrapping route navigation in `startTransition` (React defers showing the fallback if the transition resolves quickly), the `useDeferredValue` alternative, and the difference between concurrent transitions (may show stale content briefly) vs non-concurrent (always shows fallback).""",
+
+"""**Debug Scenario:**
+A `WeakRef`-based cache is not behaving as expected — cached values are immediately garbage collected even though they are still referenced:
+
+```ts
+const cache = new Map<string, WeakRef<ComputedResult>>();
+cache.set(key, new WeakRef(result));
+// later:
+cache.get(key)?.deref() // returns undefined immediately!
+```
+
+The `result` object has no other strong references — it was passed to `new WeakRef` and immediately became GC-eligible. Show: ensuring the original `result` variable is still reachable in the calling scope when the `deref()` is called, understanding that GC can run between the `new WeakRef()` call and `deref()` in production V8, and using `FinalizationRegistry` to remove dead WeakRef entries from the Map.""",
+
+"""**Debug Scenario:**
+A developer notices that server-side rendered HTML is significantly larger than necessary — each page includes a 200KB `window.__NEXT_DATA__` JSON blob even for simple static pages:
+
+```html
+<script id="__NEXT_DATA__" type="application/json">
+{"props":{"pageProps":{"allProducts": [/* 500 products × 400 bytes each = 200KB */]}}}
+</script>
+```
+
+The entire product catalog is serialized into `pageProps` even though only 10 products display above the fold. Show: filtering props server-side to include only immediately-needed data, using `generateStaticParams` with selective data, fetching additional data client-side with React Query, and the `unstable_serialize` trick to avoid double-fetching.""",
 
 ]

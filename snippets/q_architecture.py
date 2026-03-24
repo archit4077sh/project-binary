@@ -1,485 +1,652 @@
 """
-snippets/q_architecture.py — BATCH 5: 28 brand-new Architecture questions
-Zero overlap with batch1, batch2, batch3, or batch4 archives.
+snippets/q_architecture.py — BATCH 6: 55 brand-new Architecture questions
+Zero overlap with batches 1-5 archives.
 """
 
 Q_ARCHITECTURE = [
 
 """**Task (Code Generation):**
-Implement a `createBFFClient<Schema>` (Backend for Frontend) that provides a typed data layer:
+Implement a `createEventSourcingStore<State, Event>` for event-sourced state management:
 
 ```ts
-const bff = createBFFClient({
-  baseUrl: '/api/bff',
-  schema: {
-    'dashboard.overview':  { input: { userId: z.string() }, output: DashboardOverviewSchema },
-    'products.search':     { input: SearchFiltersSchema, output: z.array(ProductSchema) },
-    'orders.create':       { input: CreateOrderSchema, output: OrderConfirmationSchema },
+const store = createEventSourcingStore<CartState, CartEvent>({
+  initialState: { items: [], total: 0 },
+  reducer: (state, event) => {
+    switch (event.type) {
+      case 'ITEM_ADDED': return addItem(state, event.item);
+      case 'ITEM_REMOVED': return removeItem(state, event.itemId);
+    }
+  },
+  persist: {
+    adapter: new PostgresEventAdapter(db),
+    snapshotEvery: 100,   // snapshot after 100 events to avoid replay from start
   },
 });
 
-// Fully typed:
-const overview = await bff.call('dashboard.overview', { userId: '123' });
-// overview: DashboardOverview
+store.dispatch({ type: 'ITEM_ADDED', item: product });
+const currentState = store.getState();
+const history = await store.replayFrom(timestamp);
 ```
 
-Show: the BFF server-side aggregation layer (single endpoint that orchestrates multiple microservice calls in parallel), the typed client that validates input/output with Zod, request deduplication (two concurrent `dashboard.overview` calls with same args → one HTTP request), and the `trpc`-style end-to-end type inference.""",
-
-"""**Debug Scenario:**
-A React app using React Query has a memory leak in production. Heap snapshots show `QueryObserver` objects accumulating over time — hundreds of thousands of instances.
-
-Investigation shows a custom hook creates a new query key on every render:
-
-```ts
-function useProductData(id: string) {
-  const timestamp = Date.now(); // new key each render!
-  return useQuery({
-    queryKey: ['product', id, timestamp], // changes every render
-    queryFn: () => api.getProduct(id),
-  });
-}
-```
-
-React Query creates a new `QueryObserver` for each unique `queryKey`. With a changing timestamp, each render registers a new observer. Show: removing `timestamp` from the query key, using `staleTime` for cache freshness control instead, and React Query devtools for visualizing the live observer count.""",
+Show: the event log append-only pattern, snapshot creation and restoration, replaying events from a snapshot, and event versioning (migrating old event shapes).""",
 
 """**Task (Code Generation):**
-Build a `createSagaRunner` for managing complex multi-step business workflows (without redux-saga dependency):
+Build a `createCircuitBreaker<T>` for resilient external service calls:
 
 ```ts
-const checkoutSaga = createSagaRunner({
-  name: 'checkout',
-  steps: {
-    validateCart:   async (ctx) => { await validateInventory(ctx.cart); return ctx; },
-    applyDiscount:  async (ctx) => ({ ...ctx, total: applyDiscounts(ctx.cart, ctx.user) }),
-    charge:         async (ctx) => ({ ...ctx, paymentId: await chargeCard(ctx.total) }),
-    fulfillOrder:   async (ctx) => ({ ...ctx, orderId: await createOrder(ctx) }),
-  },
-  compensations: {
-    charge:         async (ctx) => await refundPayment(ctx.paymentId!),
-    validateCart:   async (ctx) => await releaseInventoryHold(ctx.cart),
-  },
-  onStepStart:    (step) => logger.info(`Starting ${step}`),
-  onStepComplete: (step) => metrics.increment(`saga.${step}.success`),
-  onCompensate:   (step) => logger.warn(`Compensating ${step}`),
+const externalAPI = createCircuitBreaker({
+  call: (url: string) => fetch(url).then(r => r.json()),
+  failureThreshold: 5,      // open after 5 failures
+  recoveryTimeout: 30_000,  // try again after 30s (half-open)
+  successThreshold: 2,      // close after 2 consecutive successes
+  onStateChange: (from, to) => metrics.record('circuit_state', { from, to }),
 });
 
-const result = await checkoutSaga.run({ cart, user });
+const data = await externalAPI.execute('/api/products');
+// If circuit is OPEN: throws CircuitOpenError immediately (no network call)
+// If circuit is HALF_OPEN: makes one test call
+// If circuit is CLOSED: makes the call normally
 ```
 
-Show: sequential step execution with accumulated context, automatic compensation (rollback) in reverse order on failure, TypeScript context type accumulation through steps, and retry logic per step.""",
-
-"""**Debug Scenario:**
-A monorepo with 5 packages builds correctly but end-to-end tests fail with mismatched API types — the frontend uses a stale type definition for a request that the backend changed 3 days ago.
-
-The frontend package has `@my-org/api-types` as a devDependency pinned to `^1.2.0`. The backend updated `api-types` to `1.3.0` (added required `correlationId` field) but the frontend wasn't updated.
-
-Show: pinning internal workspace packages to `workspace:*` (always uses the local workspace version), adding a CI step that runs `npm ls @my-org/api-types` and fails if versions differ between packages, using a `changesets` bot that requires all consumers to update when the API types package is changed, and a TypeScript project reference to the api-types package (forces recompilation when types change).""",
+Show: the three states (CLOSED/OPEN/HALF_OPEN), the state machine transitions, `CircuitOpenError` fast-fail, and a `getStatus()` method for health checks.""",
 
 """**Task (Code Generation):**
-Implement a `createCircuitBreaker<T>` for protecting services from cascade failures:
+Implement a `createCQRS` (Command Query Responsibility Segregation) pattern for a feature:
 
 ```ts
-const paymentBreaker = createCircuitBreaker({
-  call: processPayment,
-  thresholds: {
-    failureRate: 0.5,      // open after 50% failure rate
-    sampleWindow: 20,      // over last 20 calls
-    successToClose: 3,     // require 3 successes to close (half-open)
+// Command side (writes):
+const commandBus = createCommandBus({
+  handlers: {
+    CreateOrder:   createOrderHandler(orderRepo, inventoryService),
+    CancelOrder:   cancelOrderHandler(orderRepo, emailService),
+    ShipOrder:     shipOrderHandler(orderRepo, shippingAPI),
   },
-  timeout: 5000,           // calls fail-fast after 5s when open
-  onStateChange: (from, to) => metrics.record('circuit_breaker_state', { from, to }),
-  fallback: async () => ({ status: 'queued', message: 'Payment will be processed shortly' }),
+  middlewares: [authMiddleware, validationMiddleware, loggingMiddleware],
 });
 
-try {
-  const result = await paymentBreaker.call(paymentData);
-} catch (e) {
-  // Circuit is open: e.message = 'Circuit breaker OPEN'
-}
-```
-
-Show: the state machine (closed → open → half-open → closed), the rolling failure rate window, and the `fallback` function that's called when the circuit is open.""",
-
-"""**Debug Scenario:**
-A developer deploys a breaking API change (removed a required field) to production without versioning the API. Existing mobile app users on version 1.x get errors because their app sends requests with the removed field and expects it in the response.
-
-Show: implementing URL versioning (`/api/v1/users`, `/api/v2/users`), or header versioning (`Accept: application/vnd.api.v2+json`), maintaining the v1 endpoint for backward compatibility with a deprecation warning header (`Deprecation: true`, `Sunset: 2025-06-01`), and a compatibility layer in v2 that accepts v1 request shapes and transforms them.""",
-
-"""**Task (Code Generation):**
-Build a `createSchemaEvolution<V>` system for migrating data between schema versions:
-
-```ts
-const userEvolution = createSchemaEvolution({
-  v1: z.object({ name: z.string(), email: z.string() }),
-  v2: z.object({ firstName: z.string(), lastName: z.string(), email: z.string() }),
-  v3: z.object({ firstName: z.string(), lastName: z.string(), email: z.string(), role: z.enum(['user', 'admin']) }),
-  migrations: {
-    'v1->v2': (v1) => ({
-      firstName: v1.name.split(' ')[0],
-      lastName: v1.name.split(' ').slice(1).join(' ') || '',
-      email: v1.email,
-    }),
-    'v2->v3': (v2) => ({ ...v2, role: 'user' as const }),
+// Query side (reads — optimized for reading, separate data model):
+const queryBus = createQueryBus({
+  handlers: {
+    GetOrderById:   getOrderByIdHandler(readDb),
+    ListUserOrders: listUserOrdersHandler(readDb, cache),
   },
 });
 
-// Auto-migrates v1 data to v3:
-const v3User = userEvolution.migrate(v1Data, { from: 'v1', to: 'v3' });
+await commandBus.dispatch({ type: 'CreateOrder', userId, items });
+const order = await queryBus.query({ type: 'GetOrderById', orderId });
 ```
 
-Show: chaining migrations (`v1→v2→v3`), schema version detection from data shape, and backward compatibility checks.""",
-
-"""**Debug Scenario:**
-A Next.js app has multiple teams deploying different parts of the monorepo. After Team B deploys a shared `<Button>` component update, Team A's pages (not yet deployed) show broken layouts because the shared component's API changed:
-
-```ts
-// Old Button API:
-<Button type="primary">Click</Button>
-
-// New Button API (breaking change):
-<Button variant="primary">Click</Button>  // 'type' prop removed
-```
-
-Show: semantic versioning for the shared component library with `changesets`, flagging breaking changes in PRs using the `changeset` bot, adding a `type` prop alias that maps to `variant` for backward compatibility during the transition period, and a Storybook visual regression test that catches UI changes before deployment.""",
+Show: the command/query type separation (commands mutate, queries read), middleware pipeline for commands, and how to sync the read model from command side events.""",
 
 """**Task (Code Generation):**
-Implement a `createQueryPlanner` for optimizing batched data fetching (DataLoader pattern):
+Build a `createPluginSystem<PluginAPI>` framework for extensible applications:
 
 ```ts
-const userLoader = createQueryPlanner<string, User>({
-  batchFetch: async (ids) => {
-    const users = await db.users.findMany({ where: { id: { in: ids } } });
-    return ids.map(id => users.find(u => u.id === id) ?? null);
+const pluginAPI = createPluginSystem<PluginAPI>({
+  hooks: ['beforeRender', 'afterSave', 'onError'],
+  api: { db, cache, logger },
+});
+
+// Third-party plugins:
+pluginAPI.register({
+  name: 'analytics-plugin',
+  version: '1.0.0',
+  onMount: (api) => {
+    api.hooks.afterSave.tap('analytics', (event) => {
+      api.db.analytics.record(event);
+    });
   },
-  batchDelay: 5,         // collect IDs for 5ms before firing
-  maxBatchSize: 100,     // max IDs per batch request
+});
+
+// Core:
+await pluginAPI.hooks.afterSave.call({ entityType: 'product', id: productId });
+```
+
+Show: the tapable hook system (like webpack's), plugin lifecycle (`onMount`, `onUnmount`), dependency resolution between plugins (plugin A requires plugin B), version compatibility checking, and isolating plugin errors (one failing plugin doesn't crash the app).""",
+
+"""**Task (Code Generation):**
+Implement a `createMicroFrontendOrchestrator` for module federation:
+
+```ts
+const orchestrator = createMicroFrontendOrchestrator({
+  remotes: {
+    checkout: { url: 'https://checkout.internal/remoteEntry.js', scope: 'checkout' },
+    catalog:  { url: 'https://catalog.internal/remoteEntry.js',  scope: 'catalog' },
+    profile:  { url: 'https://profile.internal/remoteEntry.js',  scope: 'profile' },
+  },
+  shared: {
+    react:        { singleton: true, requiredVersion: '^18.0.0' },
+    'react-dom':  { singleton: true, requiredVersion: '^18.0.0' },
+    'design-system': { singleton: true },
+  },
+  fallback: (remoteName) => import(`./fallbacks/${remoteName}`),
+});
+
+const CheckoutApp = await orchestrator.load('checkout', './App');
+```
+
+Show: the Webpack Module Federation config for each remote, dynamic remote loading (`__webpack_init_sharing__`, `__webpack_share_scopes__`), version negotiation for shared modules, fallback loading when a remote fails, and cross-remote communication via a shared event bus.""",
+
+"""**Task (Code Generation):**
+Build a `createSagaOrchestrator` for long-running distributed transactions:
+
+```ts
+const checkoutSaga = createSaga('checkout', {
+  steps: [
+    { name: 'reserveInventory',  action: inventoryService.reserve,  compensate: inventoryService.release },
+    { name: 'chargePayment',     action: paymentService.charge,     compensate: paymentService.refund },
+    { name: 'createShipment',    action: shippingService.create,    compensate: shippingService.cancel },
+    { name: 'sendConfirmation',  action: emailService.sendConfirm,  compensate: null }, // no compensation needed
+  ],
+  onComplete: (ctx) => db.orders.update(ctx.orderId, { status: 'confirmed' }),
+  onFail:     (ctx, failedStep, error) => db.orders.update(ctx.orderId, { status: 'failed', reason: error.message }),
+});
+
+await checkoutSaga.execute({ orderId, userId, items });
+```
+
+Show: the step-by-step execution with rollback on failure (reverse compensation for all completed steps), persisting saga state to survive crashes, idempotency keys per step (retry-safe), and the saga log in the database for audit trails.""",
+
+"""**Task (Code Generation):**
+Implement a `createRepositoryPattern<Entity>` with caching and query builder:
+
+```ts
+const UserRepo = createRepository<User>({
+  table: 'users',
+  db,
+  cache: redis,
+  cacheTTL: 300,
   cacheKey: (id) => `user:${id}`,
-  cacheTTL: 60_000,
 });
 
-// 50 simultaneous calls → 1 batched DB query:
-const [alice, bob, charlie] = await Promise.all([
-  userLoader.load('u1'),
-  userLoader.load('u2'),
-  userLoader.load('u3'),
-]);
+// Typed query builder:
+const admins = await UserRepo.findMany({
+  where: { role: 'admin', active: true },
+  orderBy: { createdAt: 'desc' },
+  take: 10,
+  include: { posts: true, permissions: true },
+});
+
+// Cache-first read:
+const user = await UserRepo.findById('u1'); // checks cache first, falls through to DB
+await UserRepo.invalidate('u1');            // clears cache entry
 ```
 
-Show: the tick-based batching (collect IDs within the current microtask queue, then batch), deduplication of duplicate IDs, the in-flight request cache (concurrent loads of the same ID share one Promise), and error per-item (one failed ID doesn't fail the entire batch).""",
-
-"""**Debug Scenario:**
-A React app's global error boundary catches React rendering errors but user reports show some errors appear only in safari private mode and are never caught:
-
-```
-TypeError: Cannot read properties of undefined (reading 'analytics')
-  at window.analytics.track (...)
-```
-
-This error occurs OUTSIDE of React's rendering tree (in an event listener, not during render). Error boundaries only catch errors thrown during rendering, in lifecycle methods, and in constructors. Show: `window.addEventListener('error', handler)` for uncaught synchronous errors, `window.addEventListener('unhandledrejection', handler)` for unhandled async errors, forwarding these to Sentry, and the `ErrorBoundary.getDerivedStateFromError` vs `componentDidCatch` API.""",
+Show: the cache-aside pattern (read-through + write-through), the typed `where` clause using `Partial<Entity>` or Prisma-style filters, and `UserRepo.findMany` with pagination.""",
 
 """**Task (Code Generation):**
-Build a `createDomainEventStore` for event-sourced state management:
+Build a `createFeatureToggle` system with percentage rollout and user targeting:
 
 ```ts
-const orderStore = createDomainEventStore<Order, OrderEvent>({
-  eventHandlers: {
-    'order.created':    (state, e) => ({ ...initialOrder, id: e.payload.orderId }),
-    'item.added':      (state, e) => ({ ...state, items: [...state.items, e.payload.item] }),
-    'discount.applied': (state, e) => ({ ...state, discount: e.payload.discount }),
-    'order.shipped':   (state, e) => ({ ...state, status: 'shipped', trackingId: e.payload.trackingId }),
+const flags = createFeatureToggle({
+  source: {
+    type: 'remote',
+    url: 'https://flags.example.com/api',
+    pollInterval: 60_000,
   },
-  initialState: null as Order | null,
-});
-
-// Build current state by replaying events:
-const currentOrder = orderStore.buildFrom(eventStream);
-
-// Project to a specific point in time:
-const orderAtTime = orderStore.buildFrom(eventStream, { upTo: new Date('2024-01-15') });
-```
-
-Show: the event replay engine, temporal queries, event store schema (event type, payload, timestamp, aggregate ID), and a React hook `useOrderState(orderId)` that subscribes to new events via WebSocket.""",
-
-"""**Debug Scenario:**
-A GraphQL API with subscriptions has a memory leak — `console.log('active subscriptions:', pubsub.subscriptionCount())` shows subscriptions growing from 100 to 50,000 over 24 hours, never decreasing.
-
-Investigation shows the subscription cleanup function (returned from the resolver) is never called when clients disconnect unexpectedly (browser tab closed without a clean WebSocket close):
-
-```ts
-Subscription: {
-  orderUpdated: {
-    subscribe: (_, { orderId }) => pubsub.asyncIterator(`order:${orderId}`),
-    // Missing: cleanup when client disconnects
-  }
-}
-```
-
-Show: implementing `withFilter` from `graphql-subscriptions` that calls cleanup on disconnect, the WebSocket `close` event handler in `graphql-ws` server config that triggers garbage collection for the client's subscriptions, and `asyncIterator.return()` to clean up the async iterator.""",
-
-"""**Task (Code Generation):**
-Implement a `createMicroFrontendLoader` for dynamically loading micro-frontends:
-
-```ts
-const loader = createMicroFrontendLoader({
-  registry: {
-    'checkout':    { url: 'https://checkout.example.com/remoteEntry.js', scope: 'checkout', module: './App' },
-    'product-feed': { url: 'https://catalog.example.com/remoteEntry.js', scope: 'catalog', module: './Feed' },
+  defaults: {
+    newCheckoutFlow:   { enabled: false },
+    aiRecommendations: { enabled: false, rolloutPercentage: 10 },
+    darkMode:          { enabled: true },
   },
-  sharedModules: { react: { singleton: true, requiredVersion: '^18.0.0' } },
-  onLoadError: (mfe, error) => fallbackRegistry.render(mfe),
 });
 
-// Usage:
-const CheckoutApp = await loader.load('checkout');
-<Suspense fallback={<LoadingSpinner />}>
-  <CheckoutApp cartId={cartId} onComplete={handleCheckoutComplete} />
-</Suspense>
+const user = { id: 'u1', plan: 'pro', country: 'US' };
+
+flags.isEnabled('aiRecommendations', user);
+// true for 10% of users, consistent hashing by user.id
+
+flags.isEnabled('newCheckoutFlow', user);
+// false (disabled globally)
 ```
 
-Show: dynamic `<script>` injection for the remote entry, Webpack Module Federation `__webpack_init_sharing__` and `__webpack_share_scopes__` global API calls, error boundaries per MFE, and version negotiation for shared modules.""",
-
-"""**Debug Scenario:**
-A monorepo's ESLint configuration has a `@typescript-eslint/no-floating-promises` rule that's disabled in 80% of files with `// eslint-disable-next-line`. The rule was intended to prevent unhandled Promise rejections but proved too noisy.
-
-Show: configuring `no-floating-promises` to allow `void expression` pattern (`void somePromise()` to explicitly mark intentionally unhandled Promises), the `ignoreVoid: true` option, and using an ESLint custom rule plugin that checks for `void` usage context (ensures the developer consciously chose to ignore the Promise rather than forgetting to await it).""",
+Show: consistent user bucketing using `hash(flagName + userId) % 100 < rolloutPercentage`, targeting rules (`{ criteria: { plan: 'pro' } }` — enable for pro users), SSR support (flags resolved server-side and hydrated to client), and the `useFeatureFlag` React hook.""",
 
 """**Task (Code Generation):**
-Build a `createObservabilityMiddleware` for Express that provides distributed tracing:
+Implement a `createStreamProcessor<Input, Output>` for backpressure-aware stream processing:
+
+```ts
+const processor = createStreamProcessor<LogEntry, ProcessedLog>({
+  transform: (entry) => ({
+    ...entry,
+    level: entry.severity > 5 ? 'high' : 'normal',
+    parsed: parseLogMessage(entry.raw),
+  }),
+  batchSize: 100,
+  flushInterval: 5000,         // flush every 5s even if batch not full
+  backpressure: {
+    highWaterMark: 1000,       // pause input when buffer > 1000
+    lowWaterMark: 200,         // resume input when buffer < 200
+  },
+  errorStrategy: 'skip',       // skip malformed entries
+  onFlush: (batch) => elasticsearchClient.bulk(batch),
+});
+
+const readable = getLogStream();
+readable.pipe(processor.writable);
+processor.readable.pipe(esWriter);
+```
+
+Show: implementing as a Node.js `Transform` stream, `push(null)` when done, backpressure via `highWaterMark`, batching with `setTimeout` for time-based flushing, and `objectMode: true` for object streams.""",
+
+"""**Task (Code Generation):**
+Build a `createCDNPurgeStrategy` for intelligent cache invalidation across CDN nodes:
+
+```ts
+const cdnPurge = createCDNPurgeStrategy({
+  provider: 'cloudflare',
+  zoneId:   process.env.CF_ZONE_ID!,
+  apiToken: process.env.CF_API_TOKEN!,
+  strategies: {
+    content: 'tag',   // purge by cache tag (most efficient)
+    pricing: 'path',  // purge specific URL patterns
+    images:  'prefix', // purge all /images/* URLs
+  },
+});
+
+// After a content update:
+await cdnPurge.purge({ type: 'content', tags: ['product-123', 'category-electronics'] });
+await cdnPurge.purge({ type: 'pricing', path: '/api/prices/product-123' });
+```
+
+Show: Cloudflare's Cache Tag purge API, surrogate key headers (`Cache-Tag: product-123`) set by the origin, bulk purge batching (Cloudflare: max 30 tags per request), and a circuit breaker around CDN API calls.""",
+
+"""**Task (Code Generation):**
+Implement a `createObservabilityMiddleware` for Express/Node.js with OpenTelemetry:
 
 ```ts
 app.use(createObservabilityMiddleware({
-  tracer: opentelemetry.trace.getTracer('api-server'),
-  propagator: new W3CTraceContextPropagator(),
-  excludePaths: ['/health', '/metrics'],
-  enrichSpan: (span, req) => {
-    span.setAttribute('user.id', req.user?.id ?? 'anonymous');
-    span.setAttribute('tenant.id', req.headers['x-tenant-id']);
+  serviceName: 'api-gateway',
+  tracing: {
+    exporter: new OTLPTraceExporter({ url: process.env.OTEL_EXPORTER_URL }),
+    autoInstrument: ['http', 'pg', 'redis'],
   },
-  metricsExporter: prometheusExporter,
+  metrics: {
+    exporter: new PrometheusExporter({ port: 9464 }),
+    collect: ['http_requests_total', 'http_request_duration_seconds', 'active_connections'],
+  },
+  logging: {
+    format: 'json',
+    includeTraceId: true,   // correlate logs with traces
+  },
 }));
 ```
 
-Show: extracting trace context from incoming `traceparent` header (W3C Trace Context), creating a child span for each request, recording `http.method`, `http.status_code`, and `http.route` span attributes per OpenTelemetry semantic conventions, Prometheus counter/histogram for request duration, and forwarding the trace context to outgoing `fetch` calls within the request handler.""",
-
-"""**Debug Scenario:**
-A team uses GitHub Actions to deploy to production on every merge to `main`. A typo in a recently merged PR broke the login flow in production for 40 minutes before it was noticed.
-
-Design a safer deployment pipeline:
-1. Static analysis gate (TypeScript + ESLint run on PR, block merge on failure)
-2. Preview deployments for every PR (Vercel/Netlify preview URLs)
-3. Smoke test that runs against preview before merging
-4. Canary deployment to main (5% of traffic → 25% → 100%, with automatic rollback on error spike)
-
-Show the GitHub Actions workflow YAML for the smoke test gate step and the canary traffic routing configuration.""",
+Show: `opentelemetry-api` span creation and propagation, `@opentelemetry/auto-instrumentations-node` for automatic instrumentation, Prometheus metric types (Counter, Histogram, Gauge), correlating logs with trace ID, and health check endpoint `/metrics` for Prometheus scraping.""",
 
 """**Task (Code Generation):**
-Implement a `createAuthorizationEngine<Permissions>` with RBAC and ABAC:
+Build a `createTestDoubles` factory for deterministic testing of external dependencies:
 
 ```ts
-const auth = createAuthorizationEngine({
-  roles: {
-    admin:    ['users:*', 'products:*', 'orders:*'],
-    manager:  ['products:read', 'products:write', 'orders:read'],
-    customer: ['products:read', 'orders:own:*'],
-  },
-  attributes: {
-    'orders:own:read': (user, resource) => user.id === resource.ownerId,
-    'orders:own:write': (user, resource) => user.id === resource.ownerId && resource.status === 'draft',
-  },
+const doubles = createTestDoubles({
+  db: mockDatabase({
+    users: [{ id: 'u1', email: 'alice@test.com', role: 'admin' }],
+    posts: [],
+  }),
+  email: spyEmailService(),       // records calls, doesn't send
+  payment: stubPaymentService({   // always returns success
+    charge: () => ({ transactionId: 'txn_test_123', status: 'succeeded' }),
+  }),
+  time: frozenClock(new Date('2024-01-15T10:00:00Z')),
 });
 
-const can = await auth.check(user, 'orders:own:read', order);
-// can.allowed: true/false
-// can.reason: 'attribute-check:orders:own:read' | 'role:customer' | 'denied'
+// Usage in tests:
+const result = await createOrder(doubles.db, doubles.payment, { userId: 'u1' });
+expect(doubles.email.calls).toHaveLength(1);
+expect(doubles.email.calls[0].to).toBe('alice@test.com');
 ```
 
-Show: the permission inheritance (wildcard matching `users:*`), attribute-based checks for ownership, permission caching, and Express middleware integration.""",
+Show: the `mockDatabase` implementing the repository interface in memory, `spyEmailService` recording calls in an array, `stubPaymentService` returning preset responses, and `frozenClock` overriding `Date.now()` and `setTimeout`.""",
 
-"""**Debug Scenario:**
-A Prisma-based API has N+1 query problems. Fetching 10 blog posts each with their author triggers 11 database queries instead of 2:
+"""**Task (Code Generation):**
+Implement a `createSecretsManager` that fetches and caches secrets from AWS Secrets Manager:
 
 ```ts
-const posts = await prisma.post.findMany({ take: 10 });
-// renders each post's author:
-for (const post of posts) {
-  const author = await prisma.user.findUnique({ where: { id: post.authorId } }); // 10 queries!
+const secrets = createSecretsManager({
+  region: 'us-east-1',
+  cacheTTL: 3600_000,         // re-fetch after 1 hour
+  refreshBefore: 300_000,     // refresh 5 minutes before expiry
+  onRefreshError: (err, key) => logger.error('Failed to refresh secret', { key, err }),
+});
+
+const dbPassword = await secrets.get('prod/database/password');
+const apiKey     = await secrets.get('prod/stripe/api-key');
+// Subsequent calls within TTL: cached, no AWS API call
+```
+
+Show: AWS SDK `GetSecretValueCommand`, caching with timestamps, proactive refresh before expiry using `setInterval`, error handling (return stale cached value on refresh failure), and TypeScript generics for structured secrets (`secrets.getJSON<DBConfig>('prod/database')`).""",
+
+"""**Task (Code Generation):**
+Build a `createAuditTrail` system that logs all data mutations with rollback capability:
+
+```ts
+const auditTrail = createAuditTrail({
+  storage: new PostgresAuditStorage(db),
+  captureFields: ['createdBy', 'updatedBy', 'timestamp'],
+  exclude: ['password', 'accessToken'],
+  retentionDays: 365,
+});
+
+// Wraps any entity repository:
+const auditedUserRepo = auditTrail.wrap(UserRepository);
+
+await auditedUserRepo.update('u1', { role: 'admin' });
+// Logs: { entityType:'user', entityId:'u1', action:'UPDATE', before:{role:'user'}, after:{role:'admin'}, actor:'admin@example.com', at: Date }
+
+// Rollback:
+await auditTrail.rollback({ entityType: 'user', entityId: 'u1', toTimestamp: oneDayAgo });
+```
+
+Show: the before/after snapshot storage (using PostgreSQL JSONB), field exclusion for sensitive data, the `rollback` function replaying inverse operations, and querying the audit log by entity or actor.""",
+
+"""**Task (Code Generation):**
+Implement a `createHealthCheck` endpoint with dependency checks and circuit integration:
+
+```ts
+const health = createHealthCheck({
+  checks: {
+    database: async () => {
+      await db.raw('SELECT 1');
+      return { status: 'up', latency: lastDbLatency };
+    },
+    redis: async () => {
+      const pong = await redis.ping();
+      return { status: pong === 'PONG' ? 'up' : 'down' };
+    },
+    externalAPI: circuitBreaker.getStatus, // uses circuit state
+  },
+  timeouts: { database: 2000, redis: 1000, externalAPI: 500 },
+  criticalChecks: ['database'],   // If database is down, overall status = down
+  degradedChecks: ['externalAPI'], // If externalAPI is down, overall status = degraded
+});
+
+app.get('/health', health.handler);
+// { status: 'up' | 'degraded' | 'down', checks: {...}, version: '1.2.3', uptime: 3600 }
+```
+
+Show: parallel check execution with individual timeouts, overall status aggregation logic, the Kubernetes readiness vs liveness probes distinction, and caching health check results for 5 seconds to prevent health-check-induced load.""",
+
+# ── Debugging ─────────────────────────────────────────────────────────────────
+
+"""**Debug Scenario:**
+A microservices architecture has "thundering herd" problems — when a cache node restarts, all 100 services immediately query the database simultaneously, bringing it down:
+
+```ts
+async function getData(key: string) {
+  const cached = await redis.get(key);
+  if (cached) return JSON.parse(cached);
+  // All 100 services hit DB simultaneously when cache is empty!
+  const data = await db.query('SELECT * FROM data WHERE key = $1', [key]);
+  await redis.set(key, JSON.stringify(data), 'EX', 3600);
+  return data;
 }
 ```
 
-Show: the `include` option in Prisma to join authors in a single query (`findMany({ include: { author: true } })`), Prisma's query log to count actual DB queries, `select` to limit returned fields (avoid over-fetching), and the DataLoader pattern for GraphQL resolvers that can't use Prisma joins.""",
-
-"""**Task (Code Generation):**
-Build a `createCRDTDocument<T>` for conflict-free collaborative editing:
-
-```ts
-const doc = createCRDTDocument<Document>({
-  initialState: { title: '', content: '', tags: [] },
-  mergeFn: {
-    title: 'last-write-wins',     // LWW with Lamport timestamp
-    content: 'operational-transform', // OT for text editing
-    tags: 'set-union',            // merge as sets (no duplicates)
-  },
-  clientId: generateClientId(),
-});
-
-// Local update:
-doc.update('title', 'New Title');
-
-// Remote update from another client:
-doc.merge(remoteOperation);
-
-// Both clients eventually converge to the same state
-const finalState = doc.state();
-```
-
-Show: Lamport timestamps for LWW, vector clocks for causality tracking, the text OT algorithm (insert/delete operations that transform around concurrent edits), and React integration for collaborative editing.""",
+Show: implementing a distributed lock (Redis SETNX "mutex key" with expiry) so only ONE service queries the DB while others wait, probabilistic early expiration (refresh cache when TTL < 5% remaining, not at expiry), and jittered cache TTLs (add ± 10% randomness to prevent mass expiry at the same time).""",
 
 """**Debug Scenario:**
-A developer uses `try/catch` in an async function but the catch block never executes after a thrown error inside a `forEach` callback:
+A GraphQL subscription is sending duplicate events to subscribers — every update triggers the subscription 3x:
 
 ```ts
-async function processAll(items: Item[]) {
-  try {
-    items.forEach(async (item) => {
-      await processItem(item); // throws!
-    });
-  } catch (e) {
-    console.log('caught!'); // never runs
+schema.subscriptionType?.addFields({
+  postUpdated: {
+    subscribe: () => pubsub.asyncIterator(['POST_UPDATED']),
+    resolve: (payload) => payload,
+  },
+});
+
+// On post update — publishing 3 times instead of 1:
+await pubsub.publish('POST_UPDATED', { post });
+await pubsub.publish('POST_UPDATED', { post }); // BUG: copied by mistake
+await pubsub.publish('POST_UPDATED', { post }); // BUG
+```
+
+Show: auditing all publish call sites for the subscription topic, using a unique event ID (`eventId: uuid()`) and filtering duplicate IDs at the subscriber, and the Apollo Subscription server's built-in deduplication with `filter` function.""",
+
+"""**Debug Scenario:**
+A Redis-based session store causes "ECONNRESET" errors under high load, causing users to be logged out:
+
+```ts
+app.use(session({
+  store: new RedisStore({ client: redis }),
+  secret: process.env.SESSION_SECRET,
+  resave: false,
+  saveUninitialized: false,
+}));
+```
+
+Under high load, Redis connections are exhausted. `ECONNRESET` means the connection was dropped. Show: configuring `ioredis` with a connection pool (`maxRetriesPerRequest: 3`, `retryStrategy`), using `connect-redis` with retry options, monitoring Redis connection count (`redis.info('clients')`), and horizontal Redis scaling with Cluster mode or Redis Sentinel for high availability.""",
+
+"""**Debug Scenario:**
+A gRPC microservice has a memory leak — each unary RPC call creates a new `grpc.Client` instance that is never destroyed:
+
+```ts
+async function callInventoryService(productId: string) {
+  const client = new InventoryServiceClient(url, credentials); // new client per request!
+  const response = await promisify(client.getStock.bind(client))({ productId });
+  // client never closed!
+  return response;
+}
+```
+
+gRPC clients maintain a connection pool internally. Creating a new client per request creates a new pool, which is never closed. Show: creating the client once at module level (singleton), calling `client.close()` on graceful shutdown, using `@grpc/grpc-js`'s built-in keepalive options, and a client pool pattern for services that require parallel connections.""",
+
+"""**Debug Scenario:**
+A message queue consumer sometimes processes the same message twice, creating duplicate database records:
+
+```ts
+consumer.on('message', async (msg) => {
+  const order = JSON.parse(msg.content.toString());
+  await db.orders.create({ data: order }); // May run twice!
+  channel.ack(msg);                        // Ack AFTER processing
+});
+```
+
+If the service crashes between `create` and `ack`, RabbitMQ redelivers the message. Show: implementing idempotency by storing `message.properties.messageId` in a `processed_messages` table, checking before processing (`if (await alreadyProcessed(msgId)) return channel.ack(msg)`), using PostgreSQL's `ON CONFLICT DO NOTHING` for the idempotency record and the order creation in a single transaction, and `msg.fields.redelivered` flag for early detection.""",
+
+"""**Debug Scenario:**
+A multi-region deployment has diverging data — writes to region A aren't appearing in region B:
+
+```ts
+// Database: CockroachDB with multi-region config
+// Primary region: us-east-1
+// Secondary region: eu-west-1
+
+// User in EU writes data, reads it back immediately → shows old data!
+const result = await db.users.update({ where: { id }, data: { name } });
+const freshUser = await db.users.findUnique({ where: { id } }); // stale!
+```
+
+Read-after-write consistency is not guaranteed across regions — the read may route to a secondary region replica that hasn't caught up. Show: using `Durable` reads in CockroachDB (`SET locality_optimized_search TO OFF`), read-your-writes sessions (`BEGIN; ... COMMIT` keeps reads on the same node), routing reads to the region that just accepted the write, and eventual consistency acceptance with optimistic UI updates.""",
+
+"""**Debug Scenario:**
+A Kubernetes deployment of a Node.js app shows "502 Bad Gateway" errors during deploys — a few seconds of downtime during each rolling update:
+
+```yaml
+spec:
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+```
+
+During rolling update, the old pod receives `SIGTERM` and stops accepting new connections immediately, but the Load Balancer hasn't removed it from rotation yet — requests during this window get 502. Show: adding a `preStop` hook with `sleep 5` to give the LB time to deregister (`lifecycle.preStop.exec.command: ['sleep', '5']`), graceful shutdown in Node.js (`server.close(() => process.exit(0))`), and `terminationGracePeriodSeconds: 30` to allow in-flight requests to complete.""",
+
+"""**Debug Scenario:**
+A distributed lock using Redis `SETNX` has a race condition — two processes both acquire the lock simultaneously:
+
+```ts
+async function acquireLock(key: string, ttl: number) {
+  const acquired = await redis.setnx(key, 'locked');
+  if (acquired) {
+    await redis.expire(key, ttl); // NOT ATOMIC with setnx!
+    return true;
   }
+  return false;
 }
 ```
 
-`forEach` doesn't await the async callbacks — it fires them all synchronously (returning Promises that float). The `try/catch` wraps synchronous `forEach`, not the async operations inside. Show: replacing `forEach` with `for...of` loop (properly awaits each), `Promise.all(items.map(async item => processItem(item)))` for concurrent processing with a single catchable rejection, and `Promise.allSettled` for processing all items even if some fail.""",
-
-"""**Task (Code Generation):**
-Implement a `createDatabaseMigrationRunner` with rollback support:
-
-```ts
-const runner = createDatabaseMigrationRunner({
-  migrations: [
-    {
-      id: '001_create_users',
-      up:   async (db) => { await db.query(`CREATE TABLE users (...)`); },
-      down: async (db) => { await db.query(`DROP TABLE users`); },
-    },
-    {
-      id: '002_add_roles',
-      up:   async (db) => { await db.query(`ALTER TABLE users ADD COLUMN role VARCHAR(50)`); },
-      down: async (db) => { await db.query(`ALTER TABLE users DROP COLUMN role`); },
-    },
-  ],
-  stateTable: '_migrations',    // tracks applied migrations
-});
-
-await runner.up();         // apply all pending
-await runner.down(1);      // rollback last 1
-await runner.status();     // list applied/pending
-```
-
-Show: the `_migrations` tracking table schema, transactional migration (rollback DB transaction if migration fails), checksum validation (detect if a migration file was modified after being applied), and dry-run mode that shows SQL without executing.""",
+Between `setnx` and `expire`, the process might crash — the lock is never released (deadlock). Two processes could both see `setnx=0` if the lock expired between their checks. Show: using `SET key value EX ttl NX` (atomic single command), Redlock algorithm for distributed locking across multiple Redis nodes, and the unique lock token value for safe release (`SET key uuid EX ttl NX; ...if GET key === uuid: DEL key`).""",
 
 """**Debug Scenario:**
-A large express app has 200+ API routes. Adding authentication middleware to each route manually is error-prone — 12 routes are missing auth middleware and are publicly accessible.
-
-Show: a default-secure approach using a global middleware that applies auth to ALL routes, then an explicit `publicRoute` decorator or `auth: false` flag for routes that should be public:
+An event-driven system using Kafka shows messages processing out of order — newer messages are sometimes processed before older ones for the same entity:
 
 ```ts
-app.use(authMiddleware); // secure everything by default
-
-// Explicit opt-out:
-app.get('/api/public/health', markAsPublic, healthHandler);
-app.post('/api/public/login', markAsPublic, loginHandler);
-```
-
-And an integration test that crawls all registered routes and asserts each either has `markAsPublic` or returns 401 without auth headers.""",
-
-"""**Task (Code Generation):**
-Build a `createMultiRegionClient` that routes requests to the nearest region:
-
-```ts
-const client = createMultiRegionClient({
-  regions: {
-    'us-east': { url: 'https://us-east.api.example.com', latency: Infinity },
-    'eu-west': { url: 'https://eu-west.api.example.com', latency: Infinity },
-    'ap-south':{ url: 'https://ap-south.api.example.com', latency: Infinity },
-  },
-  discoveryEndpoint: 'https://global.api.example.com/nearest-region',
-  fallbackStrategy: 'next-fastest',   // on error, try next region
-  healthCheckInterval: 30_000,
+// Multiple consumers in a consumer group, each processing messages concurrently
+consumer.on('message', async (msg) => {
+  await processOrder(msg.value.orderId, msg.value); // concurrent!
 });
-
-const data = await client.get('/api/data'); // automatically routes to nearest region
 ```
 
-Show: latency measurement via `HEAD` requests to each region endpoint, the region selection algorithm, request retries with regional failover, and `navigator.connection.effectiveType` for adjusting the health check frequency on slow connections.""",
+Kafka guarantees ordering within a partition but not across partitions. Multiple consumers mean messages for the same order can be on different partitions. Show: using the `orderId` as the Kafka partition key (`{ key: order.id, value: JSON.stringify(event) }`) to ensure all events for an order go to the same partition, sequential processing within a partition (one consumer per partition, no concurrency within the handler), and the consumer group partition assignment strategy.""",
 
 """**Debug Scenario:**
-A cloud-hosted app stores user sessions in a single Redis instance. When Redis has a maintenance window, ALL users are logged out simultaneously (sticky session problem).
-
-Show: a multi-tier session storage strategy — primary Redis, secondary Redis replica (read only, fallback), and a degraded mode that falls back to encrypted JWT cookies (stateless, no Redis needed at all) for the duration of the outage. The JWT fallback has a short 15-minute expiry and the server automatically switches back to Redis sessions when it recovers, with a `x-session-degraded: true` header that the client can use to show a "reduced functionality" notice.""",
-
-"""**Task (Code Generation):**
-Implement a `createWebhookDispatcher` that delivers events with guaranteed at-least-once delivery:
+An API Gateway's rate limiter allows burst requests that exceed the intended rate:
 
 ```ts
-const dispatcher = createWebhookDispatcher({
-  storage: postgresQueue,    // persistent queue
-  workers: 5,                // concurrent delivery workers
-  delivery: {
-    timeout: 10_000,
-    retries: 5,
-    backoff: 'exponential',  // 1s, 2s, 4s, 8s, 16s
-  },
-  signing: { algorithm: 'HMAC-SHA256', headerName: 'X-Webhook-Signature' },
-  onDeliverySuccess: (event, attempt) => metrics.record('webhook_delivered'),
-  onDeadLetter: (event) => alertOps('webhook permanently failed', event),
-});
+// Token bucket rate limiter: 100 requests/minute
+const limiter = new TokenBucket({ capacity: 100, refillRate: 100 / 60 });
 
-await dispatcher.dispatch({
-  eventType: 'payment.completed',
-  payload: { orderId: 'ord_1', amount: 99.99 },
-  subscribers: ['https://partner-a.com/hooks', 'https://partner-b.com/hooks'],
+// A client sends 100 requests in 1 second → all allowed!
+// Then 0 requests for 59 seconds → bucket refills to 100
+// Then 100 requests in 1 second again → all allowed!
+// In 2 seconds: 200 requests processed — double the intended rate!
+```
+
+Token bucket allows burst equal to bucket capacity at any time. Show: the sliding window log algorithm (stores timestamps of each request, counts requests in the past 60 seconds — no burst possible), the sliding window counter (compromise: tracks current and previous window counts, interpolates), and `@upstash/ratelimit`'s implementation of each strategy.""",
+
+"""**Debug Scenario:**
+A Next.js API route that calls a database connection pool is hitting "too many connections" in production:
+
+```ts
+// lib/db.ts — runs on every import!
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  max: 10,
 });
 ```
 
-Show: the persistent queue schema, worker pool processing, retry scheduling with exponential backoff, HMAC signing of payload, and the dead-letter queue after max retries.""",
+In Next.js API routes (Serverless Functions), each function invocation may import `db.ts` fresh, creating a NEW pool with 10 connections. With 100 concurrent requests, that's 1000 connections. Show: using `globalThis` to reuse the pool across invocations (`globalThis.__pgPool ??= new Pool(...)`), PgBouncer for connection pooling at the infrastructure level (thousands of app connections share a fixed pool), and Neon's serverless driver which uses HTTP/WebSocket for connection-less queries.""",
 
 """**Debug Scenario:**
-A developer builds a real-time collaborative feature using WebSockets, but load testing shows the WebSocket server becomes a bottleneck at 5,000 concurrent connections. The server is a single Node.js process.
-
-Show: horizontal scaling with multiple Node.js WebSocket server processes, using Redis Pub/Sub as the message bus between processes (when user A sends a message, process 1 publishes to Redis, process 2 has user B subscribed and forwards the message), sticky session configuration in the load balancer (same client always routes to same WebSocket server to maintain connection state), and `socket.io`'s built-in Redis adapter that handles this pattern.""",
-
-"""**Task (Code Generation):**
-Build a `createEventualConsistencyChecker` for detecting stale reads after writes in distributed systems:
+A webhook receiver service sometimes misses webhook events because the HTTP response times out before the event is fully processed:
 
 ```ts
-const checker = createEventualConsistencyChecker({
-  primaryRead:  (id) => primaryDb.users.find(id),
-  replicaRead:  (id) => replicaDb.users.find(id),
-  equalityFn:   (a, b) => a.version === b.version,
-  maxWait:      5000,   // wait up to 5s for replica to catch up
-  pollInterval: 100,    // check every 100ms
+app.post('/webhooks', async (req, res) => {
+  const event = req.body;
+  await processWebhookEvent(event); // Takes 5-10 seconds!
+  res.json({ received: true });     // Sender times out after 3 seconds!
 });
-
-// After a write:
-await primaryDb.users.update(userId, { name: 'Alice' });
-const { converged, latency } = await checker.waitForConvergence(userId);
-// converged: true (replica caught up in 240ms)
-// latency:   240ms (replication lag)
 ```
 
-Show: the polling loop that stops when primary and replica return equal results, timeout handling, using this in integration tests to verify replication lag SLAs, and a monitoring dashboard endpoint that reports current replication lag.""",
+Webhook senders expect a fast `200 OK` response (typically < 5 seconds). If they don't get it, they retry, causing duplicate processing. Show: responding immediately with `200 OK`, then processing asynchronously (`res.json({ received: true }); processInBackground(event)`), persisting to a queue (Redis, BullMQ) and processing separately, and using the webhook event `id` for idempotency (track processed IDs to skip retries).""",
 
 """**Debug Scenario:**
-A GraphQL API built with Apollo Server 4 returns `null` for a field that should never be null, causing the entire query to return `null` at the parent level due to error propagation:
+A service-to-service authentication using short-lived JWTs is failing frequently because the token issuance service and the consuming service have clock skew:
 
-```graphql
-type User {
-  id: ID!
-  profile: Profile!  # Non-null — if this resolver throws, parent becomes null!
+```ts
+// Token issuer: generates JWT with 60-second expiry
+const token = jwt.sign({ sub: serviceId }, secret, { expiresIn: 60 });
+
+// Consumer: validates with current time
+jwt.verify(token, secret); // Fails! Consumer clock is 90s ahead of issuer!
+```
+
+60-second JWT verified by a service whose clock is 90 seconds ahead → token is already expired. Show: adding clock skew tolerance to `jwt.verify` (`{ clockTolerance: 120 }` — allow ±2 minutes), increasing token expiry to 5-15 minutes for service tokens, using NTP synchronization across all services, and the `iat` (issued at) vs `exp` (expires at) claims.""",
+
+"""**Debug Scenario:**
+A background job that processes images is using 100% CPU on a single core and taking 30 minutes per batch, blocking all other work in the process:
+
+```ts
+// Image processing worker (single-threaded):
+for (const image of images) {
+  await sharp(image.buffer).resize(800).toFile(image.output); // CPU-bound!
 }
 ```
 
-In Apollo, if a non-null field resolver throws, the error propagates up to the nearest nullable parent. If `profile` is `!` (non-null) and it throws, `user` becomes `null`. Show: making the field nullable in the schema (`profile: Profile`) for resilience, using `@catch` directive (Apollo Gateway), wrapping the resolver in `try/catch` and returning a default profile, and the difference between Apollo's error masking (`formatError`) and `includeStacktraceInErrorResponses: false`.""",
+`sharp` is CPU-intensive. Running sequentially in Node.js's event loop blocks other work. Show: distributing work across `worker_threads` (`os.cpus().length` workers), using a `WorkerPool` to fan out images to workers, `sharp`'s built-in thread pool (`sharp.concurrency(N)`) as a simpler alternative, and `Promise.allSettled` for parallel processing with error collection.""",
+
+"""**Debug Scenario:**
+An Elasticsearch index has degraded write performance and frequent GC pauses after 6 months. The index has 500M documents and was never optimized:
+
+```ts
+// Every save creates a new Lucene segment:
+await es.index({ index: 'events', document: event });
+// After 6 months: thousands of tiny segments → slow search + high GC
+```
+
+Elasticsearch auto-merges segments, but aggressive writes outpace merging. Show: scheduling `forcemerge` during low-traffic windows (`POST /events/_forcemerge?max_num_segments=1`), enabling `index.merge.policy.segments_per_tier: 5` for faster auto-merging, configuring `refresh_interval: 30s` for high-throughput indexes (fewer segments), time-based index rotation (daily/weekly indices with ILM for large event streams), and shard size optimization (target 10-50GB per shard).""",
+
+"""**Debug Scenario:**
+A REST API designed with resource-oriented URLs breaks down when implementing a complex workflow that spans multiple resources:
+
+```ts
+// Simple CRUD — fine with REST:
+POST   /orders
+GET    /orders/:id
+PATCH  /orders/:id
+DELETE /orders/:id
+
+// But a "checkout" workflow needs to:
+// 1. Reserve inventory
+// 2. Create payment intent
+// 3. Create order
+// 4. Send confirmation email
+// All atomically — how to model this in REST?
+PATCH /orders/:id { action: 'checkout' } // RPC disguised as REST — bad design
+```
+
+Show: modeling as a resource (`POST /checkout-sessions`), the command pattern endpoint (`POST /orders/:id/actions/checkout`), using a CQRS command bus (`POST /commands/CheckoutOrder`), and when to abandon REST for GraphQL mutations or RPC (gRPC) for complex workflows.""",
+
+"""**Debug Scenario:**
+A React frontend's API calls are failing with CORS errors after a backend deployment switched from a single API server to multiple services behind a gateway:
+
+```
+Access-Control-Allow-Origin header missing from https://api.example.com/v2/products
+```
+
+The new API Gateway handles routing but doesn't forward the CORS `OPTIONS` preflight to the origin services — it returns `403` for the preflight. Show: handling CORS at the gateway level (not in each service), configuring Kong/AWS API Gateway/nginx CORS for `OPTIONS` preflight responses, the correct CORS response headers (`Access-Control-Allow-Origin`, `Access-Control-Allow-Methods`, `Access-Control-Allow-Headers`), and why `*` doesn't work with `credentials: 'include'`.""",
+
+"""**Debug Scenario:**
+A multi-tenant SaaS app has a data isolation bug — querying a tenant's data sometimes returns another tenant's records:
+
+```ts
+// Row-level security via app-level filter:
+const data = await db.records.findMany({
+  where: {
+    tenantId: req.tenant.id, // Correct filter
+    ...userProvidedFilters,  // BUG: userProvidedFilters can override tenantId!
+  },
+});
+```
+
+If `userProvidedFilters` contains `{ tenantId: 'other-tenant' }`, the where clause uses the user's provided `tenantId` instead of the session's tenant. Show: enforcing `tenantId` with `AND` semantics rather than merged `where` (`db.records.findMany({ where: { AND: [{ tenantId: reqTenantId }, userFilters] } })`), using PostgreSQL Row-Level Security (RLS) as a defense-in-depth measure, and audit logging for cross-tenant data access attempts.""",
+
+"""**Debug Scenario:**
+A Next.js server that handles file uploads crashes with "out of memory" when users upload large files:
+
+```ts
+export const config = { api: { bodyParser: { sizeLimit: '50mb' } } };
+
+export default async function handler(req, res) {
+  const buffer = req.body; // 50MB loaded into memory!
+  await processAndUploadToS3(buffer);
+}
+```
+
+Loading the entire 50MB into memory per request is unsustainable under concurrent load. Show: using `busboy` or `formidable` for streaming multipart parsing, piping the Node.js request stream directly to S3 (`s3.upload({ Body: req }).promise()`), using presigned URLs for direct browser-to-S3 upload (bypassing the server entirely), and `Content-Length` validation before reading the body.""",
+
+"""**Debug Scenario:**
+A Prisma ORM query causes N+1 issues that aren't detected in development (small dataset) but crash production (millions of rows):
+
+```ts
+const users = await prisma.user.findMany({ take: 100 });
+for (const user of users) {
+  const posts = await prisma.post.findMany({ where: { authorId: user.id } }); // N+1!
+  process(user, posts);
+}
+```
+
+100 users → 101 database queries. Show: using Prisma's `include: { posts: true }` to join in one query, `select` for specific field projection, the `prisma.$extends` logging extension to detect N+1 at development time, and `prisma.$metrics` for tracking query counts in production.""",
 
 ]
