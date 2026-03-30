@@ -1,782 +1,615 @@
 """
-snippets/q_debugging.py — BATCH 6: 56 brand-new Debugging questions
-Zero overlap with batches 1-5 archives.
+snippets/q_debugging.py — BATCH 7: 56 brand-new Debugging questions
+Zero overlap with batches 1-6 archives.
 """
 
 Q_DEBUGGING = [
 
-"""**Debug Scenario:**
-A developer opens Chrome DevTools Network panel and sees a critical API request is taking 2.3 seconds, but the server logs show processing time of only 80ms. The 2.3 seconds include: DNS lookup (450ms), Connection (120ms), TLS (180ms), Waiting (TTFB) (80ms), Download (5ms).
-
-Show: using `dns-prefetch` and `preconnect` to eliminate DNS/TCP/TLS overhead for critical API domains, `keep-alive` connections (HTTP/1.1: `Connection: keep-alive`), HTTP/2 multiplexing that reuses one TCP connection for all API calls, and identifying that the 750ms of DNS+Connection+TLS is the bottleneck — not the server.""",
-
-"""**Debug Scenario:**
-A React app has a "Warning: Each child in a list should have a unique 'key' prop" even though keys ARE provided:
-
-```tsx
-function UserList({ users }: { users: User[] }) {
-  return users.map((user, index) => (
-    <div>                                     {/* Missing key here! */}
-      <UserCard key={user.id} user={user} />  {/* Key on the wrong element */}
-    </div>
-  ));
-}
-```
-
-The `key` is on `<UserCard>` but not on the wrapping `<div>`. The outermost element returned from `map` must have the `key`. Show: moving `key` to the outer `<div key={user.id}>`, removing the redundant `key` from `<UserCard>`, and using `<Fragment key={user.id}>` when the wrapper is only for grouping.""",
-
-"""**Debug Scenario:**
-A CSS grid layout breaks on Safari 15 but works on Chrome. The grid uses `gap` shorthand:
-
-```css
-.grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 1rem; /* Not supported in Safari < 12 as 'gap', must use 'grid-gap' */
-}
-```
-
-Safari 15 supports `gap` in grid, but some users are on Safari 14. Show: adding `grid-gap` alongside `gap` for older Safari (`grid-gap: 1rem; gap: 1rem;`), using `@supports (gap: 1rem)` as a feature query, and the BrowserStack/Sauce Labs workflow for cross-browser testing.""",
-
-"""**Debug Scenario:**
-A developer's `async/await` error handler silently swallows errors in a `forEach`:
+'''**Debug Scenario:**
+A developer's Node.js process memory grows steadily from 200MB to 2GB over 24 hours with no obvious leak in application code:
 
 ```ts
-async function processAll(items: Item[]) {
-  items.forEach(async (item) => {
-    try {
-      await processItem(item); // Errors here are caught by inner try/catch
-    } catch (e) {
-      console.error('Item failed', e);
-    }
-  });
-  // processAll returns void BEFORE any items finish!
-}
-```
-
-`forEach` doesn't await async callbacks. The outer function resolves before processing begins. Show: replacing with `for...of` + `await` for sequential processing, or `Promise.all(items.map(async (item) => ...))` for parallel processing, and the `p-limit` library for controlled concurrency with error handling.""",
-
-"""**Debug Scenario:**
-A Next.js page passes large objects through `getServerSideProps` and the response is 1.2MB, causing slow page loads:
-
-```ts
-export async function getServerSideProps() {
-  const allProducts = await db.products.findMany(); // 50,000 rows = 1.2MB JSON!
-  return { props: { allProducts } };
-}
-```
-
-`getServerSideProps` serializes props to JSON and embeds it in the initial HTML as `__NEXT_DATA__`. Show: filtering to only the fields needed (`select: { id, name, price, image }`), paginating (return only the first page), fetching the full dataset client-side with React Query (load page fast, data loads incrementally), and the 128KB recommended limit for `__NEXT_DATA__`.""",
-
-"""**Debug Scenario:**
-Chrome DevTools shows a long "Evaluate Script" task (180ms) blocking the main thread during page load:
-
-```html
-<script src="/vendor/lodash.js"></script>        <!-- 73KB gzipped = 350ms parse on mobile -->
-<script src="/vendor/moment.js"></script>         <!-- 22KB gzipped = 100ms parse on mobile -->
-<script src="/bundle.js"></script>                <!-- 200KB gzipped = 600ms parse on mobile -->
-```
-
-JavaScript parse+evaluation is CPU-bound and blocks the main thread. Show: switching to `date-fns` (tree-shakeable) from `moment.js`, removing Lodash (most utils native in modern JS), using `<script defer>` to parse after HTML, code splitting to defer non-critical JS, and the "Cost of JavaScript" metric (parsing + compilation time).""",
-
-"""**Debug Scenario:**
-A React form's `onChange` handler reconstructs a new object from the entire form state on every keystroke, causing unnecessary re-renders of unrelated fields:
-
-```tsx
-const [form, setForm] = useState({ name: '', email: '', bio: '' });
-
-const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-  setForm({ ...form, [e.target.name]: e.target.value });
-  // Every field re-renders on every change to any field
-};
-```
-
-All fields share one `useState` — any update rerenders all. Show: using `React.memo` on individual field components (only re-render if their specific value changes), separating fields into independent `useState` calls, using `useReducer` for form state (more efficient for complex forms), and `react-hook-form` (uses uncontrolled inputs — zero re-renders per keystroke).""",
-
-"""**Debug Scenario:**
-A developer finds that `console.log` statements in production are crashing the app when objects contain circular references:
-
-```ts
-const user = { id: 'u1', manager: null as any };
-user.manager = user; // Circular reference!
-console.log(JSON.stringify(user)); // TypeError: Converting circular structure to JSON
-```
-
-`JSON.stringify` throws for circular references. Show: implementing a `safeStringify` using a `WeakSet` replacer to detect and skip circular refs, using `util.inspect` in Node.js (handles circles), `JSON.stringify(obj, null, 2)` with a custom replacer, and the `flatted` library for serializing/deserializing circular JSON.""",
-
-"""**Debug Scenario:**
-A custom `useFetch` hook causes "Warning: Can't perform a React state update on an unmounted component" every time a page is navigated away during a pending request:
-
-```ts
-function useFetch(url: string) {
-  const [data, setData] = useState<Data | null>(null);
-
-  useEffect(() => {
-    fetch(url).then(r => r.json()).then(setData); // setData after unmount!
-  }, [url]);
-
-  return data;
-}
-```
-
-The `fetch` completes after the component unmounts and tries to call `setData` on an unmounted component. Show: using `AbortController` to cancel the fetch on cleanup (`signal: controller.signal; return () => controller.abort()`), checking a `mounted` flag before `setData`, and React 18's `startTransition` which handles this automatically.""",
-
-"""**Debug Scenario:**
-A developer uses `Object.assign` to merge config objects but deeply nested defaults are not preserved:
-
-```ts
-const defaults = {
-  server: { port: 3000, host: 'localhost', ssl: { enabled: false, cert: '' } },
-  logging: { level: 'info', format: 'json' },
-};
-
-const userConfig = { server: { port: 8080 } };
-
-const merged = Object.assign({}, defaults, userConfig);
-// merged.server: { port: 8080 } — ssl and host are GONE!
-// Object.assign does shallow merge only
-```
-
-Show: deep merge using `structuredClone` + recursive merge, `lodash.merge` for deep merging, `{ ...defaults, server: { ...defaults.server, ...userConfig.server } }` for manual deep spread, and TypeScript's `DeepPartial<T>` type for the user config parameter.""",
-
-"""**Debug Scenario:**
-A React component that renders a `<canvas>` for data visualization crashes in SSR (Next.js) because `canvas` APIs aren't available in Node.js:
-
-```ts
-function Chart({ data }: { data: ChartData }) {
-  useEffect(() => {
-    const canvas = canvasRef.current!;
-    const ctx = canvas.getContext('2d')!; // ReferenceError: document is not defined in SSR
-    drawChart(ctx, data);
-  }, [data]);
-}
-```
-
-`canvas.getContext` errors during SSR because there's no DOM in Node.js. Show: wrapping in `useEffect` (already client-only), using dynamic import with `ssr: false` (`const Chart = dynamic(() => import('./Chart'), { ssr: false })`), and `typeof window !== 'undefined'` guard for canvas operations.""",
-
-"""**Debug Scenario:**
-A developer writes an optimization using `shouldComponentUpdate` but it creates subtle bugs when nested objects change:
-
-```tsx
-shouldComponentUpdate(nextProps) {
-  return this.props.data !== nextProps.data; // Shallow reference check
-}
-
-// Parent updates a nested property:
-this.setState(prev => {
-  prev.data.items.push(newItem); // MUTATION — same reference!
-  return { data: prev.data };   // shouldComponentUpdate: false → no re-render!
-});
-```
-
-Mutating state and comparing references is always incorrect. Show: using immutable updates (`{ ...prev.data, items: [...prev.data.items, newItem] }`), switching to `React.PureComponent` (shallow comparison of all props/state), and using `immer`'s `produce` for immutable state updates.""",
-
-"""**Debug Scenario:**
-An API returns a `Set-Cookie` header but the cookie doesn't appear in the browser due to `SameSite` restrictions:
-
-```
-Set-Cookie: session=abc123; Secure; HttpOnly; SameSite=Strict
-```
-
-The frontend is at `app.example.com` and the API is at `api.example.com` — cross-origin. With `SameSite=Strict`, the cookie is not sent on cross-origin requests. Show: changing to `SameSite=None; Secure` for cross-origin cookies, or switching to `SameSite=Lax` (cookies sent on top-level navigation but not AJAX), moving the API to the same origin via a reverse proxy (best solution), and the browser's "third-party cookie" blockage in Chrome 2024.""",
-
-"""**Debug Scenario:**
-A developer's TypeScript union type narrows correctly in `if/else` but not in a `switch-case`:
-
-```ts
-type Shape = { kind: 'circle'; radius: number } | { kind: 'rect'; width: number; height: number };
-
-function getArea(shape: Shape): number {
-  switch (shape.kind) {
-    case 'circle': return Math.PI * shape.radius ** 2; // shape.radius: number ✓
-    case 'rect':   return shape.width * shape.height;  // shape.width: number ✓
-    // TypeScript marks the 'default' case as unreachable (exhaustive ✓)
-  }
-  // ERROR: Function lacks ending return statement — TypeScript doesn't see the switch as exhaustive
-}
-```
-
-TypeScript doesn't always consider a `switch` exhaustive without explicit `default`. Show: adding `default: return assertNever(shape)`, or adding `return 0` after the switch, or using a `switch (true)` with explicit `return` in each case so TypeScript sees all code paths return.""",
-
-"""**Debug Scenario:**
-A developer's custom `useDebounce` hook fires immediately even when the component re-renders within the debounce window:
-
-```ts
-function useDebounce<T>(value: T, delay: number): T {
-  const [debounced, setDebounced] = useState(value);
-
-  useEffect(() => {
-    const timer = setTimeout(() => setDebounced(value), delay);
-    return () => clearTimeout(timer); // This cancels and restarts on every render!
-  }); // BUG: No dependency array — runs on every render
-
-  return debounced;
-}
-```
-
-Without a dependency array, the effect runs on EVERY render. If the component re-renders (e.g., parent re-renders), the timer resets even if `value` didn't change. Show: adding `[value, delay]` as the dependency array so the timer only resets when `value` or `delay` changes.""",
-
-"""**Debug Scenario:**
-A developer's React `useRef` for tracking previous value doesn't work on the first render:
-
-```ts
-function usePrevious<T>(value: T): T | undefined {
-  const prevRef = useRef<T>();
-  useEffect(() => {
-    prevRef.current = value;
-  });
-  return prevRef.current; // Returns undefined on first render!
-}
-```
-
-On the first render, `prevRef.current` is `undefined` because the effect hasn't run yet. Show: this is the correct/expected behavior for a `usePrevious` hook — on the first render there IS no previous value, so `undefined` is appropriate. Also show an alternative that initializes with the first value (`useRef<T>(value)`) — this returns the initial value on first render (current = previous = initial).""",
-
-"""**Debug Scenario:**
-A production React app is throwing "Too many re-renders" in a component that uses `useState` inside a render:
-
-```tsx
-function Counter() {
-  const [count, setCount] = useState(0);
-  setCount(count + 1); // Called during render — infinite loop!
-  return <div>{count}</div>;
-}
-```
-
-`setCount` called during render triggers another render, which calls `setCount` again — infinite loop. Show: moving `setCount` into a `useEffect` (for side effects), an event handler (for user interactions), or an initial `useState(() => computeInitialValue())` lazy initializer (for one-time setup).""",
-
-"""**Debug Scenario:**
-A developer creates a memoized selector but performance is worse than without memoization:
-
-```ts
-// Without reselect — recomputes each render but fast:
-const total = cart.reduce((sum, item) => sum + item.price, 0);
-
-// With reselect — but called with a new args object every render:
-const selectTotal = createSelector(
-  [(state) => state.cart],
-  (cart) => cart.reduce((sum, item) => sum + item.price, 0)
-);
-
-const total = useSelector(selectTotal); // Memoization works properly ✓
-```
-
-Actually the memoization here IS working correctly. Show a pattern that BREAKS memoization:
-
-```ts
-const selectProductsByCategory = createSelector(
-  [(state) => state.products, (_, category) => category],
-  (products, category) => products.filter(p => p.category === category)
-);
-
-// In component — broken: createSelector only has cache size of 1:
-const electronics = useSelector(state => selectProductsByCategory(state, 'electronics'));
-const books = useSelector(state => selectProductsByCategory(state, 'books')); // invalidates electronics cache!
-```
-
-Show: using `createSelectorCreator` with a custom cache (memoize-one with cache size 2+) or creating a selector factory (`makeSelectByCategory = () => createSelector(...)`).""",
-
-"""**Debug Scenario:**
-A developer's Node.js script for bulk database inserts is extremely slow — inserting 100,000 rows takes 45 minutes:
-
-```ts
-for (const record of records) {
-  await db.query('INSERT INTO events VALUES ($1, $2, $3)', [record.id, record.data, record.ts]);
-}
-// 100,000 ROUNDTRIPS to the database!
-```
-
-One `await` per row means 100,000 sequential network round-trips. Show: batching inserts (`INSERT INTO events VALUES ($1,$2,$3),($4,$5,$6)...` with chunks of 1000 rows), using PostgreSQL `COPY FROM` for maximum throughput (100K rows in ~5 seconds), `Promise.all` with controlled concurrency for parallel inserts, and Prisma's `createMany`.""",
-
-"""**Debug Scenario:**
-A developer's regex produces catastrophic backtracking and hangs the server when processing user input:
-
-```ts
-// Vulnerable regex — nested quantifiers:
-const emailRegex = /^([a-zA-Z0-9._%+-]+)+@([a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}$/;
-
-// With malicious input: 'aaaaaaaaaaaaaaaaaaaaaa@b'
-// Regex engine tries exponential combinations — hangs for minutes!
-server.post('/validate', (req, res) => {
-  const isValid = emailRegex.test(req.body.email); // HANGS
-});
-```
-
-Nested quantifiers like `([a-zA-Z0-9.]+)+` cause catastrophic backtracking. Show: simplifying to `^[^\s@]+@[^\s@]+\.[^\s@]+$` for basic email validation, using the `validator.js` library (battle-tested, safe regex), setting a regex timeout with a worker thread, and using `re2` (Google's linear-time regex engine) for user-supplied patterns.""",
-
-"""**Debug Scenario:**
-A developer's `Promise.race` doesn't cancel the slower promise when the faster one resolves:
-
-```ts
-const result = await Promise.race([
-  fetch('/api/fast-endpoint'),   // resolves in 100ms
-  fetch('/api/slow-endpoint'),   // still in flight!
-]);
-// slow-endpoint fetch continues running in background (resource leak)
-```
-
-`Promise.race` returns the first resolved value but doesn't cancel other promises — they continue in the background. Show: using `AbortController` with all promises in the race (`const controller = new AbortController(); Promise.race([..., timeout]).finally(() => controller.abort())`), and a `raceWithAbort` utility that cancels all others when one wins.""",
-
-"""**Debug Scenario:**
-A developer's `EventEmitter` memory leak warning fires after adding listeners dynamically:
-
-```ts
+const EventEmitter = require('events');
 const emitter = new EventEmitter();
 
-function subscribeComponent(name: string) {
-  emitter.on('data', (payload) => processPayload(name, payload));
-  // No cleanup! Called 15 times → 15 listeners on 'data' → warning
-}
-```
-
-`EventEmitter` warns at >10 listeners (default). Each call adds a new listener that's never removed. Show: calling `emitter.off('data', handler)` when the consumer is done (requires storing the handler reference: `const handler = (p) => ...; emitter.on('data', handler)`), `emitter.once` for one-time listeners, and React's cleanup pattern in `useEffect` for EventEmitter subscriptions.""",
-
-"""**Debug Scenario:**
-A Node.js Express app has very slow cold starts (8 seconds) on Lambda because it imports the entire app at the top of the handler:
-
-```ts
-// handler.ts (Lambda entry):
-import express from 'express';
-import helmet from 'helmet';
-import { router } from './routes/all-routes'; // imports everything!
-
-const app = express();
-app.use(helmet());
-app.use(router);
-
-export const handler = serverlessExpress({ app });
-// 8 second cold start → all routes & dependencies loaded upfront
-```
-
-Show: lazy-loading routes that aren't needed for this specific Lambda invocation, using `--bundle` with `esbuild` to reduce deployment package size (fewer `require()` calls), keeping the Lambda runtime warm with scheduled pings, and the `middy` middleware framework which lazy-loads plugins.""",
-
-"""**Debug Scenario:**
-A developer's `for await...of` loop over an async generator processes items slower than expected — each item waits for the previous to finish:
-
-```ts
-async function* generateItems() {
-  for (const url of urls) {
-    const data = await fetch(url).then(r => r.json());
-    yield data; // Each item waits for its fetch to complete
-  }
-}
-
-for await (const item of generateItems()) {
-  await processItem(item); // Sequential: fetch then process, one at a time
-}
-```
-
-Items are fetched and processed sequentially. Show: prefetching the next item while processing the current one (producer-consumer pattern), using `Promise.all` to fetch all items upfront if they fit in memory, and a sliding window approach (fetch N items ahead, process 1 at a time).""",
-
-"""**Debug Scenario:**
-A developer's TypeScript `interface` extends two interfaces with conflicting method signatures, but TypeScript doesn't raise an error — it silently uses one:
-
-```ts
-interface A { getValue(): number }
-interface B { getValue(): string }
-
-interface C extends A, B {} // TypeScript Error: Named property 'getValue' of types 'A' and 'B' are not identical.
-
-// But if using intersection instead:
-type C = A & B;
-const obj: C = { getValue: () => ... }; // What type should getValue return?
-// Answer: getValue(): number & string = never!
-```
-
-Show: the correct error TypeScript raises for `interface extends` with conflicts, the silent `never` produced by intersection, and resolving conflicts by overriding in `C`: `interface C extends A, B { getValue(): never }` to explicitly acknowledge the conflict, or redesigning to avoid the conflict.""",
-
-"""**Debug Scenario:**
-A React app's `useEffect` dependency on a function causes an infinite loop:
-
-```tsx
-function Parent() {
-  const fetchData = async () => {
-    const data = await api.getData();
-    setItems(data);
-  };
-
-  return <Child fetchData={fetchData} />;
-}
-
-function Child({ fetchData }: { fetchData: () => Promise<void> }) {
-  useEffect(() => {
-    fetchData(); // Called on every render!
-  }, [fetchData]); // fetchData changes every render (new function reference)
-}
-```
-
-`fetchData` is redefined every `Parent` render. Show: wrapping `fetchData` in `useCallback` in the Parent, moving `fetchData` outside the component if it doesn't use component state, and the ESLint `react-hooks/exhaustive-deps` rule detecting this pattern.""",
-
-"""**Debug Scenario:**
-A developer discovers that `Date.now()` returns different values between server and client, causing hydration mismatches in Next.js:
-
-```tsx
-function TimeDisplay() {
-  return <span>Generated at: {new Date(Date.now()).toLocaleTimeString()}</span>;
-  // SSR: 10:00:00 AM | Client hydration: 10:00:01 AM → mismatch!
-}
-```
-
-The server renders at one time, the client hydrates a second or more later — clocks diverge. Show: using `suppressHydrationWarning` on the element (for truly dynamic values where mismatches are expected), computing the time in a `useEffect` (renders on client only), passing the server time as a prop from `getServerSideProps`, and `useId` for stable identifiers across SSR/CSR.""",
-
-"""**Debug Scenario:**
-A developer's Webpack bundle includes multiple copies of the same library because different packages require different versions:
-
-```
-Bundle analysis shows:
-  - lodash@4.17.21 (348KB) — used by app
-  - lodash@3.10.1  (310KB) — required by old-library
-  Total: 658KB of lodash!
-```
-
-Two versions of lodash are bundled when they could share one. Show: Webpack's `resolve.alias` to deduplicate (`'lodash': path.resolve(__dirname, 'node_modules/lodash')`), `npm dedupe` / `yarn dedupe` to hoist compatible versions, the `webpack-bundle-analyzer` plugin for identifying duplicates, and upgrading `old-library` to support the newer lodash version.""",
-
-"""**Debug Scenario:**
-A developer's React Native / web app has flickering images because `uri` prop changes on every render:
-
-```tsx
-function Avatar({ userId }: { userId: string }) {
-  const uri = `https://cdn.example.com/avatars/${userId}.jpg?t=${Date.now()}`; // Changes every render!
-  return <img src={uri} />;
-}
-```
-
-`Date.now()` in the `uri` means every render generates a new URL — browser's image cache misses, causing flicker. Show: removing the cache-busting query param (CDN handles invalidation via path: `/avatars/${userId}/v2.jpg`), using `useMemo` to stabilize the URL, and proper cache busting strategy (change URL only when the image changes, not on every render).""",
-
-"""**Debug Scenario:**
-A developer's `window.addEventListener` keeps adding duplicate listeners because it's called inside a function that runs on every state change:
-
-```tsx
-function App() {
-  const [count, setCount] = useState(0);
-
-  const onResize = () => setCount(window.innerWidth);
-  window.addEventListener('resize', onResize); // Added every render!
-
-  return <Button onClick={() => setCount(c => c + 1)} />;
-}
-```
-
-`addEventListener` outside `useEffect` runs on every render — adding unlimited listeners. Show: wrapping in `useEffect` with proper cleanup (`return () => window.removeEventListener('resize', onResize)`), stabilizing `onResize` with `useCallback` (or using `useCallback` with no deps: `useCallback((e) => setCount(window.innerWidth), [])`).""",
-
-"""**Debug Scenario:**
-A developer's Node.js `https.request` doesn't validate SSL certificates and passes security review quietly:
-
-```ts
-const req = https.request({
-  hostname: 'api.example.com',
-  path: '/data',
-  rejectUnauthorized: false,  // Disables SSL verification!
-}, (res) => { ... });
-```
-
-`rejectUnauthorized: false` disables certificate validation, making the connection vulnerable to man-in-the-middle attacks. Show: removing `rejectUnauthorized: false`, using `ca` option to provide a custom CA bundle for self-signed certificates in internal networks, the `NODE_EXTRA_CA_CERTS` environment variable for system-level custom CAs, and `NODE_TLS_REJECT_UNAUTHORIZED=0` as an env var (also insecure, also wrong).""",
-
-"""**Debug Scenario:**
-A developer's React component using `useImperativeHandle` doesn't expose the method to the parent — the ref is always `null`:
-
-```tsx
-const Input = forwardRef((props, ref) => {
-  useImperativeHandle(ref, () => ({
-    focus: () => inputRef.current?.focus(),
-    clear: () => { /* ... */ },
-  }));
-  return <input ref={inputRef} />;
-});
-
-// Parent:
-const inputRef = useRef<HTMLInputElement>(); // Wrong type!
-inputRef.current?.focus(); // focus() from useImperativeHandle, not DOM
-```
-
-The parent typed the ref as `HTMLInputElement` but `useImperativeHandle` returns a custom object, not the DOM element. Show: typing the ref as `useRef<{ focus: () => void; clear: () => void }>(null)`, defining an `InputHandle` interface for the exposed methods, and `forwardRef<InputHandle, InputProps>`.""",
-
-"""**Debug Scenario:**
-A developer's CSS `position: sticky` isn't working despite correct styling:
-
-```css
-.sticky-header {
-  position: sticky;
-  top: 0;      /* correct */
-  z-index: 10; /* correct */
-}
-```
-
-The sticky element isn't sticking. Investigation reveals the parent container has `overflow: hidden`:
-
-```css
-.parent {
-  overflow: hidden; /* Breaks sticky positioning! */
-}
-```
-
-`overflow: hidden/auto/scroll` on an ancestor breaks `sticky` positioning — the sticky element scrolls with the overflow container, not the viewport. Show: removing `overflow: hidden` from the ancestor (or changing to `overflow: clip`), finding the problematic ancestor with `getComputedStyle`, and `overflow: clip` as a safe alternative that doesn't create a scroll container.""",
-
-"""**Debug Scenario:**
-A developer's `Map` is growing unboundedly in a server that handles millions of requests:
-
-```ts
-const requestMetrics = new Map<string, RequestData>();
-
-app.use((req, res, next) => {
-  requestMetrics.set(req.id, { start: Date.now(), url: req.url });
-  res.on('finish', () => {
-    const data = requestMetrics.get(req.id);
-    logMetrics(data!);
-    // BUG: requestMetrics.delete(req.id) is missing!
-  });
+app.post('/subscribe', (req, res) => {
+  emitter.on('data', (d) => res.write(d)); // Listener added per request, never removed!
+  req.on('close', () => { /* forgot to remove emitter listener */ });
 });
 ```
 
-Every request adds to the Map but nothing removes it. After millions of requests, memory is exhausted. Show: adding `requestMetrics.delete(req.id)` in the `res.on('finish')` callback, using `WeakMap` (automatically GC'd when the key object is collected, though `req` objects may not be GC'd if other refs exist), and APM tools (Datadog, New Relic) for detecting memory leaks in production.""",
+Each HTTP request adds an event listener to the global emitter that's never removed (no `emitter.off`). After thousands of requests, the emitter holds thousands of stale listeners (and their closures, keeping `res` alive). Show: `emitter.once('data', handler)` for single-fire listeners, storing the handler reference for `emitter.off('data', handler)` in `req.on('close', ...)`, `emitter.setMaxListeners(20)` to detect leaks early (Node.js warns at 11 by default), and heap snapshot analysis in Chrome DevTools.''',
 
-"""**Debug Scenario:**
-A developer's service worker caches API responses and users see stale data after deployments:
+'''**Debug Scenario:**
+A developer's `async/await` error is silently swallowed in an Express route handler:
 
 ```ts
-// service-worker.js:
-self.addEventListener('fetch', (event) => {
-  event.respondWith(
-    caches.match(event.request).then(cached => {
-      return cached || fetch(event.request); // Return cached forever!
-    })
-  );
+app.get('/users', async (req, res) => {
+  const users = await db.users.findMany(); // If this throws...
+  res.json(users);
+  // ...Express doesn't know! req hangs forever until timeout
 });
 ```
 
-API responses are cached indefinitely — no expiry, no network update. Show: stale-while-revalidate strategy (return cache immediately, fetch update in background), cache-first with max-age check (check cache timestamp, refresh if older than 5 minutes), adding a version header check (if server version != cached version, bust cache), and the Workbox library for service worker caching strategies.""",
+In Express 4, unhandled promise rejections in route handlers don't trigger the error middleware — the request hangs. Show: wrapping with a `asyncWrapper` HOF: `const wrap = (fn) => (req, res, next) => fn(req, res, next).catch(next)`, using `express-async-errors` package (monkey-patches Express), or upgrading to Express 5 (which handles async errors natively), and global `process.on('unhandledRejection', ...)` as a circuit breaker.''',
 
-"""**Debug Scenario:**
-A React application shows `NaN` in the UI because a numeric operation got a string somewhere in the chain:
+'''**Debug Scenario:**
+A developer's `Promise.all` fails silently because one promise rejects but it's not in the array:
 
-```tsx
-function TotalPrice({ items }: { items: Item[] }) {
-  const total = items.reduce((sum, item) => sum + item.price, 0);
-  return <div>Total: ${total.toFixed(2)}</div>;
+```ts
+async function processOrders(orders: Order[]) {
+  const savePromise = db.save(orders); // NOT in Promise.all!
+  await Promise.all([
+    sendConfirmationEmails(orders),
+    updateInventory(orders),
+  ]);
+  await savePromise; // If this rejects, it's an unhandled rejection by then
 }
-// Shows: "Total: $NaN"
 ```
 
-`item.price` is `"15.99"` (a string from the API), so `0 + "15.99"` = `"015.99"` then `"015.99" + "12.00"` = `"015.9912.00"` — actually `NaN` only shows if the first string addition produces something unparseable. Show: converting `item.price` with `Number(item.price)` or `parseFloat(item.price)`, Zod schema validation at the API boundary to ensure `price` is always a number, and TypeScript types that properly reflect the actual runtime data.""",
+`savePromise` is created before `Promise.all`, so if it rejects while `Promise.all` is running, the rejection is unhandled (Node.js 15+ exits on unhandled rejections). Show: including all promises in `Promise.all`, using `Promise.allSettled` for non-critical tasks, and the subtle timing issue where a rejected promise not in `Promise.all` fires its rejection event independently.''',
 
-"""**Debug Scenario:**
-A developer's `try/catch` around a promise chain doesn't catch rejections from `.then` callbacks:
+'''**Debug Scenario:**
+A developer's React component causes "Maximum update depth exceeded" because of a missing dependency in `useEffect`:
+
+```tsx
+const [filters, setFilters] = useState({ search: '', category: '' });
+
+useEffect(() => {
+  // Fetch with current filters:
+  fetchProducts(filters).then(setProducts);
+  // Update filter stats (triggers re-render → useEffect runs again!):
+  setFilters(prev => ({ ...prev, lastFetched: Date.now() })); // Infinite loop!
+}, [filters]); // 'filters' changes every time → re-run → update filters → re-run
+```
+
+`setFilters` inside the `useEffect` updates `filters`, which is a dep, which triggers the effect again. Show: separating the stats update from the product fetch (different `useEffect` with different deps), using a `useRef` for `lastFetched` (doesn't trigger re-render), and the React ESLint exhaustive-deps rule catching this pattern.''',
+
+'''**Debug Scenario:**
+A developer's `try/catch` doesn't catch errors from async event listeners:
 
 ```ts
 try {
-  const data = await fetch('/api/data')
-    .then(r => r.json())
-    .then(data => processData(data)); // If processData throws, is it caught?
-} catch (e) {
-  console.error('Caught:', e); // Yes, it IS caught when using await
+  emitter.emit('process-data', payload);
+  // Event listener is async — errors escape the try/catch!
+} catch (err) {
+  logger.error('Failed to process', err); // Never called on async listener error
 }
 
-// But without await:
-fetch('/api/data')
-  .then(r => r.json())
-  .then(data => processData(data)); // Unhandled promise rejection!
-// The try/catch block above is gone by the time this rejects
-```
-
-Show: always `await`ing promise chains, using `.catch()` on unwaited promises, `process.on('unhandledRejection')` in Node.js as a last resort, and the ESLint rule `@typescript-eslint/no-floating-promises`.""",
-
-"""**Debug Scenario:**
-A developer's OAuth redirect flow is breaking because `window.location.href` assignment gets blocked by the browser's popup blocker:
-
-```tsx
-function LoginButton() {
-  const handleLogin = async () => {
-    const { redirectUrl } = await getOAuthUrl(); // Async call!
-    window.location.href = redirectUrl;          // Sometimes blocked!
-  };
-  return <button onClick={handleLogin}>Login</button>;
-}
-```
-
-Popup blockers block `window.location.href` or `window.open` called from async code — the browser no longer considers it a direct user gesture. Show: pre-fetching the OAuth URL on button hover (or even on mount), storing it in state, then setting `window.location.href` directly in the synchronous `onClick` handler (before any `await`).""",
-
-"""**Debug Scenario:**
-A developer's custom event emitter leaks memory because arrow function event listeners can't be removed with `off`:
-
-```ts
-class Component {
-  constructor(emitter: EventEmitter) {
-    emitter.on('update', (data) => this.handleUpdate(data)); // arrow function — new ref each call
-  }
-
-  cleanup(emitter: EventEmitter) {
-    emitter.off('update', (data) => this.handleUpdate(data)); // Different reference! Not removed!
-  }
-}
-```
-
-Show: storing the listener reference (`this.boundHandle = (data) => this.handleUpdate(data); emitter.on('update', this.boundHandle)`), then removing it (`emitter.off('update', this.boundHandle)`), or using a class-bound method (`handleUpdate = (data) => { ... }` as a class property).""",
-
-"""**Debug Scenario:**
-An Axios interceptor that refreshes JWT tokens creates infinite loops when the refresh endpoint itself returns 401:
-
-```ts
-axios.interceptors.response.use(null, async (error) => {
-  if (error.response?.status === 401) {
-    await refreshToken(); // If refresh ALSO returns 401 → infinite loop!
-    return axios.request(error.config);
-  }
-  throw error;
+emitter.on('process-data', async (payload) => {
+  await heavyProcessing(payload); // If this throws, the error goes to 'unhandledRejection'
 });
 ```
 
-If `refreshToken()` fails with 401, the interceptor catches it and tries to refresh again — endlessly. Show: checking a flag to prevent re-interception (`error.config._retry`), skipping the interceptor for the refresh endpoint URL itself, and clearing auth state + redirecting to login on refresh failure.""",
+`emitter.emit` is synchronous — it returns before the async listener's promise settles. Errors from the async listener escape to `unhandledRejection`. Show: wrapping the listener in `.catch()`  (`async (payload) => { try { await heavyProcessing(payload); } catch (err) { emitter.emit('error', err); } }`), listening to `emitter.on('error', ...)`, and `EventEmitter2` for async-aware emit.''',
 
-"""**Debug Scenario:**
-A developer notices their React app's bundle size grew by 800KB after adding a charting library, even though only a simple line chart is used:
+'''**Debug Scenario:**
+A developer's `JSON.stringify` unexpectedly produces `null` for a `Date` stored in state:
 
 ```ts
-import { Chart } from 'chart.js'; // Imports ALL chart types — 800KB!
+const event = { title: 'Meeting', date: new Date('2024-06-15') };
+const serialized = JSON.stringify(event);
+// '{"title":"Meeting","date":"2024-06-15T00:00:00.000Z"}' ← date is a string now!
 
-// But only LineChart is needed
+const parsed = JSON.parse(serialized);
+parsed.date.getMonth(); // TypeError: parsed.date.getMonth is not a function!
 ```
 
-Many libraries with a default namespace export bundle everything together. Show: using tree-shaking-compatible ES module imports (`import { Chart } from 'chart.js/auto'` vs selective imports), registering only needed chart components (`Chart.register(LineController, LinearScale, PointElement, LineElement)`), switching to a lighter alternative (`lightweight-charts` is 40KB), and checking the `webpack-bundle-analyzer` to confirm tree-shaking is working.""",
+`JSON.stringify` calls `.toISOString()` on Date objects (via `toJSON`), producing a string — so `JSON.parse` gives a string, not a Date. Show: using a custom reviver in `JSON.parse` to reconstruct Dates, `superjson` library (handles `Date`, `Map`, `Set`, `bigint` etc.), and Zod's `z.coerce.date()` for safe parsing.''',
 
-"""**Debug Scenario:**
-A developer's Node.js app has a race condition where multiple concurrent requests create duplicate database records:
+'''**Debug Scenario:**
+A developer's `axios` interceptor causes an infinite retry loop on 401 errors:
 
 ```ts
-async function getOrCreateUser(email: string) {
-  let user = await db.users.findUnique({ where: { email } });
-  if (!user) {
-    user = await db.users.create({ data: { email } }); // Race! Two requests can both findUnique null
+axios.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    if (error.response?.status === 401) {
+      const newToken = await refreshToken();
+      error.config.headers.Authorization = `Bearer ${newToken}`;
+      return axios(error.config); // Retried request also gets 401 → retried again → loop!
+    }
+    return Promise.reject(error);
   }
-  return user;
-}
-```
-
-Two concurrent requests both find no user, then both try to create — the second `create` fails with unique constraint violation. Show: handling the unique constraint violation (`catch (e) { if (e.code === 'P2002') return db.users.findUnique({ where: { email } }); throw e; }`), PostgreSQL `INSERT ... ON CONFLICT DO NOTHING RETURNING *`, and Prisma's `upsert`.""",
-
-"""**Debug Scenario:**
-A developer's `JSON.parse` silently truncates large integers from API responses:
-
-```ts
-const response = '{"orderId": 9007199254740993}'; // Larger than Number.MAX_SAFE_INTEGER
-const parsed = JSON.parse(response);
-console.log(parsed.orderId); // 9007199254740992 — truncated! Loss of precision
-```
-
-JavaScript `Number` can't safely represent integers above 2^53 - 1. Show: using `BigInt` with a custom JSON reviver (`JSON.parse(str, (key, val) => key === 'orderId' ? BigInt(val) : val)`), but the reviver receives the already-truncated number — need to process the raw JSON string, using `json-bigint` library for BigInt-safe parsing, or receiving the ID as a string in the API contract.""",
-
-"""**Debug Scenario:**
-A developer's service has `SIGTERM` handling but doesn't wait for in-flight database queries to complete before shutdown:
-
-```ts
-process.on('SIGTERM', () => {
-  server.close(); // Stops accepting new connections
-  process.exit(0); // Exits immediately! In-flight queries are killed
-});
-```
-
-Kubernetes sends SIGTERM before killing the pod. Exiting immediately kills any pending database transactions. Show: waiting for the server to drain (`server.close(async () => { await db.$disconnect(); process.exit(0); })`), setting a maximum drain timeout (`setTimeout(() => process.exit(1), 30_000)`), draining the job queue, and signaling readiness probe to fail (remove from load balancer rotation) before closing.""",
-
-"""**Debug Scenario:**
-A developer's `useSyncExternalStore` implementation causes the component to re-render on every tick even when the store data hasn't changed:
-
-```ts
-const data = useSyncExternalStore(
-  store.subscribe,
-  () => ({ ...store.getState() }), // New object every call!
-  () => ({ ...initialState }),
 );
 ```
 
-`getSnapshot` creates a new object every call — React sees it as a different value even when store data is unchanged, causing infinite re-renders. Show: memoizing the snapshot object (use `useRef` to cache the last snapshot, only return a new object if the data actually changed), or returning a stable primitive/same reference when data is unchanged (`return store.getState()` without spreading).""",
+If the token refresh succeeds but the retried request still gets 401 (e.g., insufficient permissions, not expiry), the interceptor fires again — infinite loop. Show: adding a `_retry` flag to `error.config` (`if (error.config._retry) return Promise.reject(error); error.config._retry = true`), and checking the original URL isn't the token refresh endpoint itself.''',
 
-"""**Debug Scenario:**
-A developer's `requestAnimationFrame` animation causes a stuttering effect on high refresh rate monitors (120Hz/165Hz):
+'''**Debug Scenario:**
+A developer's SQL query is vulnerable to second-order SQL injection via a stored value:
 
 ```ts
-function animate(timestamp: number) {
-  // Target: 60fps animation — moves 1px per expected 16ms frame:
-  element.style.left = `${position++}px`; // Moves 1px per frame
-  requestAnimationFrame(animate);
-}
+// First request: Stores malicious username
+await db.query('INSERT INTO users (name) VALUES ($1)', ["'; DROP TABLE users; --"]);
+// Parameterized — safe ✓ (stored as literal string)
+
+// Second request: Uses stored value UNSAFELY
+const user = await db.query('SELECT * FROM users WHERE name = \'' + storedUsername + '\'');
+// storedUsername = "'; DROP TABLE users; --"
+// Executes: SELECT * FROM users WHERE name = ''; DROP TABLE users; --'
 ```
 
-At 120Hz, `requestAnimationFrame` fires every ~8ms instead of 16ms — the animation runs at double speed. Show: using `timestamp` delta time to calculate movement based on elapsed time (not frame count): `const delta = timestamp - lastTime; position += speed * delta / 1000; lastTime = timestamp`, making the animation frame-rate independent.""",
+Safe writes + unsafe reads = second-order injection. The value was safely stored but unsafely used later. Show: ALWAYS using parameterized queries even for data read from the database (`db.query('SELECT ... WHERE name = $1', [storedUsername])`), and an ORM like Prisma that makes parameterized queries the default.''',
 
-"""**Debug Scenario:**
-A developer's React app breaks with "Hydration mismatch" errors when using `Math.random()` to generate IDs for SSR:
+'''**Debug Scenario:**
+A developer's WebSocket connection disconnects silently after 60 seconds of inactivity:
+
+```ts
+const ws = new WebSocket('wss://api.example.com/ws');
+ws.onopen = () => console.log('Connected');
+ws.onmessage = (e) => handleMessage(e.data);
+// No heartbeat! Load balancer/proxy closes idle connections after 60s
+ws.onclose = (e) => console.log('Disconnected', e.code, e.reason);
+```
+
+AWS ALB, nginx, and cloud load balancers close idle TCP connections after 60 seconds by default. Show: implementing a ping/pong heartbeat (`setInterval(() => ws.send(JSON.stringify({ type: 'ping' })), 30_000)`, clear interval on close), the WebSocket `ping` frame (server-side heartbeat), and reconnection with exponential backoff on `onclose`.''',
+
+'''**Debug Scenario:**
+A developer's `useLayoutEffect` causes a "Warning: useLayoutEffect does nothing on the server" in a Next.js SSR context:
 
 ```tsx
-function Tag({ label }: { label: string }) {
-  const id = `tag-${Math.random()}`; // Server: 0.123, Client: 0.456!
-  return <span id={id}>{label}</span>;
+function MeasuredComponent() {
+  const ref = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    setWidth(ref.current!.offsetWidth); // Needs DOM — can't run on server
+  }, []);
 }
 ```
 
-`Math.random()` is non-deterministic — server and client generate different values, causing hydration mismatch. Show: using React 18's `useId` hook (generates stable, SSR-consistent IDs), a sequential counter with `useRef`, or a content-based hash (`slugify(label)`) which is deterministic.""",
+`useLayoutEffect` doesn't run during SSR — React warns about it. Show: the standard solution `const useIsomorphicLayoutEffect = typeof window !== 'undefined' ? useLayoutEffect : useEffect`, using `useEffect` when the DOM measurement isn't needed before first paint, and `suppressHydrationWarning` as a last resort for elements that differ between server and client renders.''',
 
-"""**Debug Scenario:**
-A developer's TypeScript `as` assertion causes a silent runtime crash that TypeScript didn't prevent:
+'''**Debug Scenario:**
+A developer's `for...in` loop on an array produces unexpected behavior because it iterates prototype properties:
 
 ```ts
-const value: unknown = { name: 'Alice' };
-const user = value as User; // TypeScript allows this
-console.log(user.email.toLowerCase()); // Runtime: Cannot read properties of undefined!
+Array.prototype.customMethod = () => 'custom';
+
+const arr = [1, 2, 3];
+for (const key in arr) {
+  console.log(key); // '0', '1', '2', 'customMethod' — unexpected!
+}
 ```
 
-`as User` tells TypeScript "trust me" — but `value` doesn't actually have `email`. TypeScript's type assertions don't perform runtime checks. Show: using a type guard or Zod schema to validate before asserting (`const result = UserSchema.safeParse(value); if (result.success) use(result.data)`), `instanceof` for class types, and when `as` is safe (e.g., narrowing within a function that's already type-guarded).""",
+`for...in` iterates ALL enumerable properties including inherited ones from the prototype. Show: using `for...of` for arrays (iterates values, not indices), `arr.forEach`/`arr.map` for functional iteration, `for...in` with `Object.prototype.hasOwnProperty.call(obj, key)` check for safe object iteration, and why `for...in` is generally wrong for arrays.''',
 
-"""**Debug Scenario:**
-A developer's CSS animation doesn't work on a transformed parent because of an unexpected stacking context:
+'''**Debug Scenario:**
+A developer's `console.log` shows `{}` for a non-empty object in Chrome DevTools:
+
+```ts
+const obj = { users: [], loaded: false };
+console.log(obj); // Shows: {} in collapsed view!
+// Expanding it shows the properties — but the collapsed view is misleading
+```
+
+Chrome DevTools lazy-evaluates object references in `console.log` — if the object is mutated after logging, the logged output reflects the CURRENT state (not the state at log time). Show: `console.log(JSON.parse(JSON.stringify(obj)))` for a snapshot (but loses non-JSON types), `console.log({ ...obj })` for a shallow copy, structured clone (`structuredClone(obj)`), and the Chrome DevTools `Store as global variable` feature for debugging.''',
+
+'''**Debug Scenario:**
+A developer's TypeScript code compiles successfully but `undefined is not a function` at runtime because of optional chaining misuse:
+
+```ts
+const config = getConfig();
+const port = config?.server?.getPort();
+// If config is undefined: port = undefined (no error)
+// But if config exists and server exists, but getPort doesn't exist:
+// TypeError: config.server.getPort is not a function
+```
+
+`?.` short-circuits to `undefined` if a value in the chain is null/undefined — but it doesn't protect against calling a non-function. Show: `typeof config?.server?.getPort === 'function'` check, TypeScript strict null checks catching `getPort()` returning `undefined`, and `!` non-null assertion vs `?.` optional chaining (different guarantees).''',
+
+'''**Debug Scenario:**
+A developer's `parseInt` returns `NaN` despite receiving a seemingly valid number string:
+
+```ts
+const userInput = '  42px  ';
+console.log(parseInt(userInput));        // 42 — works (parses up to non-numeric)
+console.log(parseInt('0x1F'));           // 31 — hexadecimal
+console.log(parseInt('123', 10));        // 123 — correct base-10
+console.log(parseInt('   '));            // NaN
+console.log(parseInt('', 10));           // NaN
+
+// The bug:
+const value = parseInt(req.query.id);    // If req.query.id is an array: parseInt(['1','2']) = 1 (!)
+```
+
+`parseInt` coerces its argument to string — arrays become comma-joined. Show: `Number(value)` as a stricter alternative (NaN for partial parses like '42px'), `+value` (same as Number), always passing radix 10 (`parseInt(v, 10)`), and validating `req.query.id` is a string before parsing.''',
+
+'''**Debug Scenario:**
+A developer's fetch request to a REST API fails with CORS errors only in production:
+
+```ts
+// Works in development (Vite proxy):
+const data = await fetch('/api/users').then(r => r.json());
+
+// Fails in production with: 
+// "Access-Control-Allow-Origin header missing"
+```
+
+In development, Vite's `proxy` option forwards `/api/*` to the backend (same origin, no CORS). In production, the frontend is hosted on `cdn.example.com` and makes cross-origin requests to `api.example.com` — no CORS headers. Show: adding CORS middleware to the API server (`cors({ origin: 'https://cdn.example.com', credentials: true })`), pre-flight `OPTIONS` handling, credentials CORS (`withCredentials: true` on fetch + `Access-Control-Allow-Credentials: true` server-side), and why `Access-Control-Allow-Origin: *` can't be used with credentials.''',
+
+'''**Debug Scenario:**
+A developer's Prisma query returns stale data after an update because of the connection pool caching:
+
+```ts
+await prisma.product.update({ where: { id: 'p1' }, data: { price: 99 } });
+const product = await prisma.product.findUnique({ where: { id: 'p1' } });
+console.log(product?.price); // Still shows 49! (stale read)
+```
+
+Prisma's connection pool can route the `findUnique` to a different replica (read replica) that hasn't received the write yet. Show: adding `$transaction([update, findUnique])` to ensure both operations on the same connection, using `prisma.$queryRaw` with `SET TRANSACTION` isolation level, the `directUrl` (primary) vs `url` (replica) Prisma configuration, and explicitly routing reads to the primary after writes.''',
+
+'''**Debug Scenario:**
+A developer's `Object.assign` doesn't perform a deep merge, causing nested property deletion:
+
+```ts
+const defaults = { server: { host: 'localhost', port: 3000, ssl: true }, db: { url: '...' } };
+const userConfig = { server: { port: 8080 } };
+
+const config = Object.assign({}, defaults, userConfig);
+// Expected: { server: { host: 'localhost', port: 8080, ssl: true }, db: { url: '...' } }
+// Actual:   { server: { port: 8080 }, db: { url: '...' } }
+// userConfig.server REPLACES defaults.server entirely!
+```
+
+`Object.assign` does a shallow merge. Show: deep merge using Lodash `_.merge(defaults, userConfig)`, recursive custom `deepMerge` function, structured clone + object spread for pure objects, and the spread operator having the same shallow-merge issue (`{...defaults, ...userConfig}`).''',
+
+'''**Debug Scenario:**
+A developer's CSS-in-JS (styled-components) causes class name mismatches during SSR with Next.js:
+
+```
+Warning: Prop `className` did not match.
+Server: "sc-abc123"
+Client: "sc-def456"
+```
+
+Styled-components generates class names based on a counter — in SSR, it starts from 0, but on the client it continues from wherever the last client render left off (or resets differently). Show: adding `ServerStyleSheet` + `_document.tsx` integration for SSR, using the `babel-plugin-styled-components` (stable class names based on component name + file), and styled-components v6's `displayName` feature (deterministic class names without Babel plugin).''',
+
+'''**Debug Scenario:**
+A developer's `Array.prototype.sort` produces different orderings across browsers for equal elements:
+
+```ts
+const users = [
+  { name: 'Alice', score: 100 },
+  { name: 'Bob',   score: 100 },  // Same score as Alice!
+  { name: 'Carol', score: 100 },
+];
+
+users.sort((a, b) => b.score - a.score);
+// Chrome: [Alice, Bob, Carol] (stable — original order preserved for equals)
+// Older Safari: [Carol, Alice, Bob] (unstable — arbitrary order for equals)
+```
+
+JavaScript `Array.sort` is guaranteed stable since ES2019, but older engines aren't. Show: adding a tiebreaker (`b.score !== a.score ? b.score - a.score : a.name.localeCompare(b.name)`), use of `Intl.Collator` for locale-aware string comparisons, and the ECMAScript 2019 stability guarantee.''',
+
+'''**Debug Scenario:**
+A developer's event delegation stops working when a child button is clicked because `event.target` points to an icon inside the button:
+
+```ts
+list.addEventListener('click', (e) => {
+  if (e.target.dataset.action === 'delete') { // Works only if the <li> itself is clicked!
+    deleteItem(e.target.dataset.id);
+  }
+});
+
+// HTML: <li data-action="delete" data-id="1"><button><svg>...</svg></button></li>
+// Clicking the SVG: e.target = <svg> (no dataset.action!)
+```
+
+`e.target` is the element actually clicked — which may be a deeply nested child. Show: using `e.target.closest('[data-action="delete"]')` to walk up to the intended element, `e.currentTarget` (always the element the listener is attached to, not the target), and element matching with `.matches('[data-action]')`.''',
+
+'''**Debug Scenario:**
+A developer's Redis `INCR` counter skips values under concurrent load:
+
+```ts
+// Naive counter without atomic increment:
+const current = parseInt(await redis.get('counter') ?? '0');
+await redis.set('counter', current + 1); // Read-modify-write: NOT atomic!
+
+// Two concurrent requests both read '5', both set '6' — one increment lost!
+```
+
+`GET + SET` is a non-atomic read-modify-write — race condition. Show: using `INCR` command (atomic: `redis.incr('counter')`), `INCRBY` for incrementing by N, Redis transactions with `MULTI/EXEC` + `WATCH` for conditional increments, and Lua scripts for complex atomic operations.''',
+
+'''**Debug Scenario:**
+A developer's GitHub Actions CI pipeline runs `npm install` on every push but doesn't use the cache:
+
+```yaml
+- uses: actions/checkout@v4
+- uses: actions/setup-node@v4
+  with:
+    node-version: '20'
+- run: npm install  # Always fresh install — cache never used!
+```
+
+`actions/cache` isn't configured, and `actions/setup-node`'s built-in cache isn't enabled. Show:
+
+```yaml
+- uses: actions/setup-node@v4
+  with:
+    node-version: '20'
+    cache: 'npm'      # or 'yarn', 'pnpm'
+```
+
+Also shows the manual cache approach (`actions/cache` using `~/.npm` keyed on `package-lock.json` hash), and `npm ci` instead of `npm install` for reproducible installs in CI.''',
+
+'''**Debug Scenario:**
+A developer's IndexedDB transaction fails silently because it's accessed after the transaction completes:
+
+```ts
+const txn = db.transaction('users', 'readwrite');
+const store = txn.objectStore('users');
+
+store.put({ id: '1', name: 'Alice' });
+
+await new Promise(resolve => txn.oncomplete = resolve);
+
+// BUG: Accessing transaction after it's committed:
+const request = store.get('1'); // InvalidStateError: transaction has finished
+```
+
+IDB transactions auto-commit when no more requests are queued — the transaction is done after `oncomplete` fires. Show: reading from the store BEFORE `oncomplete` (within the same transaction), opening a new transaction for the read, and wrapping IDB operations in a library like `idb` (Jake Archibald) that provides proper Promise semantics.''',
+
+'''**Debug Scenario:**
+A developer's `navigator.geolocation.getCurrentPosition` works in development but always triggers the error callback in production:
+
+```ts
+navigator.geolocation.getCurrentPosition(
+  (pos) => setLocation(pos),
+  (err) => console.error('Geolocation denied', err)); // Always fires in production!
+```
+
+In production, the site is served over HTTP (not HTTPS) — the Geolocation API requires a secure context (HTTPS or localhost). Also, the user may have denied the permission. Show: checking `navigator.permissions.query({ name: 'geolocation' })` for the current permission state, enforcing HTTPS in production (mandatory for location API), and handling `err.code` values (`PERMISSION_DENIED: 1`, `POSITION_UNAVAILABLE: 2`, `TIMEOUT: 3`).''',
+
+'''**Debug Scenario:**
+A developer's Next.js `getServerSideProps` function causes high server CPU because it's called on every request including prefetches:
+
+```ts
+export async function getServerSideProps(context) {
+  const products = await db.products.findMany(); // Heavy query!
+  return { props: { products } };
+}
+// Next.js's <Link prefetch> calls this handler for every link in the viewport!
+```
+
+Every `<Link>` that enters the viewport triggers a prefetch request to `getServerSideProps` — even for pages not yet visited. Show: disabling prefetch for pages with heavy SSR (`<Link prefetch={false}>`), migrating to ISR (`getStaticProps` + `revalidate`) for content that doesn't need per-request freshness, and caching the DB query result for the remainder of the request window (`cache('...', () => db.query())`).''',
+
+'''**Debug Scenario:**
+A developer's regex fails to match multiline strings because `.` doesn't match newlines by default:
+
+```ts
+const text = "Hello\nWorld";
+const match = text.match(/Hello.World/);
+// null! '.' does not match '\n' unless the 's' (dotAll) flag is used
+```
+
+Show: using the `s` flag (`/Hello.World/s`) for dotAll mode (`.` matches `\n`), `[\s\S]` as a pre-ES2018 workaround, `m` (multiline) flag changes `^`/`$` to match line starts/ends (not the same as `s`), and the regex flags: `i` (case insensitive), `g` (global), `m` (multiline), `s` (dotAll), `u` (Unicode), `v` (Unicode sets, ES2024).''',
+
+'''**Debug Scenario:**
+A developer's cookie is not sent to the API because of `SameSite` and `Secure` attribute mismatches:
+
+```ts
+// Server sets cookie:
+res.cookie('session', token, {
+  httpOnly: true,
+  // Missing: sameSite and secure attributes
+});
+
+// Client fetch:
+await fetch('/api/data', { credentials: 'include' }); // Cookie not sent!
+```
+
+Modern browsers default to `SameSite=Lax` — cookies with `SameSite=Lax` are sent on same-origin requests but not on cross-origin requests (even with `credentials: include`). And if the API is on a different subdomain, the cookie needs `SameSite=None; Secure`. Show: setting `{ sameSite: 'none', secure: true }` for cross-domain cookies, `{ sameSite: 'lax', secure: false }` for localhost development, and the difference between `SameSite=Strict` (never cross-site), `Lax` (GET navigations only), and `None` (all cross-site if Secure).''',
+
+'''**Debug Scenario:**
+A developer's `setInterval` inside a React component accumulates multiple intervals rather than replacing the previous one:
+
+```tsx
+function LiveCounter() {
+  const [count, setCount] = useState(0);
+  const [interval, setInterval] = useState(1000);
+
+  useEffect(() => {
+    const id = setInterval(() => setCount(c => c + 1), interval);
+    // Missing cleanup! Previous interval keeps running when 'interval' changes
+  }, [interval]); // Re-runs when interval changes, but doesn't clear old one
+}
+```
+
+Each time `interval` changes, a new `setInterval` is created without clearing the previous. After 5 changes, 5 intervals fire simultaneously. Show: returning `() => clearInterval(id)` from the effect, the `useInterval` custom hook pattern, and `setCount(c => c + 1)` (functional update — doesn't need `count` as a dep).''',
+
+'''**Debug Scenario:**
+A developer's `Promise.race` doesn't actually cancel the losing promises:
+
+```ts
+const result = await Promise.race([
+  fetchCritical(),
+  new Promise<never>((_, reject) => setTimeout(reject, 5000, new Error('Timeout'))),
+]);
+// fetchCritical() still runs in the background even after the timeout wins!
+```
+
+`Promise.race` only races the settlement — the underlying operations (HTTP request, DB query) are not cancelled. Show: using `AbortController` with the race: pass `signal` to `fetch`, calling `controller.abort()` when the timeout wins, `React Query` and `TanStack Query` using `AbortController` automatically for cancelled queries, and the cleanup pattern in `useEffect` races.''',
+
+'''**Debug Scenario:**
+A developer's Zustand store actions don't reflect state changes when called in rapid succession:
+
+```ts
+const useStore = create((set, get) => ({
+  items: [] as Item[],
+  addItem: (item: Item) => {
+    const current = get().items; // Gets state at call time
+    set({ items: [...current, item] });
+  },
+}));
+
+// Called rapidly:
+store.getState().addItem(item1); // items: [item1]
+store.getState().addItem(item2); // items: [item1, item2] — actually fine in Zustand
+// Zustand's set is synchronous — no stale closure issue like useState
+```
+
+Zustand actually handles this correctly. The real bug: using `useState` with callbacks for the same pattern:
+
+```ts
+const [items, setItems] = useState([]);
+// In a loop:
+setItems([...items, item1]); // 'items' is stale in the closure!
+setItems([...items, item2]); // Both use the same original 'items' → only item2 added!
+setItems(prev => [...prev, item2]); // ✓ Uses functional update
+```
+
+Show: functional state updates in React (`setItems(prev => [...prev, item])`), and Zustand's `set(state => ({ items: [...state.items, item] }))` functional form.''',
+
+'''**Debug Scenario:**
+A developer's fetch with `keepalive: true` for analytics doesn't work when the page is closing because the payload is too large:
+
+```ts
+window.addEventListener('beforeunload', () => {
+  fetch('/api/analytics', {
+    method: 'POST',
+    keepalive: true,
+    body: JSON.stringify(largeEventBatch), // 200KB payload
+  });
+  // In Chrome, keepalive requests are limited to 64KB! Larger requests are silently dropped.
+});
+```
+
+The `keepalive` flag has a 64KB payload limit. Show: using `navigator.sendBeacon('/api/analytics', payload)` (65536 byte limit, queued by browser), compressing the payload before sending, batching events and sending regularly instead of on unload, and `visibilitychange` to `'hidden'` as a more reliable unload hook than `beforeunload`.''',
+
+'''**Debug Scenario:**
+A developer's module federation remote module fails to load in production due to `publicPath` misconfiguration:
+
+```js
+// webpack.config.js of remote app:
+module.exports = {
+  output: {
+    publicPath: 'auto',  // Fine in development!
+    // In production, CDN serves from 'https://assets.cdn.example.com/'
+    // but the main app (host) is at 'https://app.example.com/'
+    // 'auto' resolves relative to the host — loads wrong URLs
+  },
+};
+```
+
+`publicPath: 'auto'` uses the current document's base URL to resolve chunk URLs. When the host and remote have different domains, chunks resolve to the wrong base. Show: setting an explicit `publicPath` for the remote (`publicPath: 'https://assets.cdn.example.com/'`), or using the `__webpack_public_path__` runtime variable for dynamic configuration, and Module Federation's `remoteEntry.js` URL configuration in the host.''',
+
+'''**Debug Scenario:**
+A developer's CSS animation causes janky 30fps performance because it's animating `height` instead of `transform`:
 
 ```css
-.parent {
-  transform: translateZ(0); /* Creates a containing block! */
+.panel {
+  height: 0;
+  overflow: hidden;
+  transition: height 300ms ease;
 }
-.child {
-  position: fixed; /* Is supposed to position relative to viewport... */
-  top: 0; left: 0; /* But actually positions relative to .parent! */
+.panel.open {
+  height: 200px;
 }
+/* Smooth in Firefox but janky in Chrome on complex pages */
 ```
 
-`position: fixed` is positioned relative to the viewport UNLESS an ancestor has `transform`, `will-change`, `filter`, or `backdropFilter` — those create a new containing block. Show: checking all ancestors for the containing block triggers, moving the fixed element outside the transformed parent in the DOM, and using `position: sticky` (which uses the scroll container, not containing block) as an alternative.""",
+Animating `height` triggers Layout → Paint → Composite on every frame (browser's most expensive path). Show: using `max-height` trick (limited but avoids layout), Grid animation (`grid-template-rows: 0fr → 1fr`, GPU-accelerated in modern browsers), animating `transform: scaleY()` (cheap: Composite only), `FLIP` animation technique for animating height changes, and the Chrome DevTools Performance panel showing "Layout" recalculations.''',
 
-"""**Debug Scenario:**
-A developer's Cloud Run container fails to start with "container failed to start and listen on the port defined by the PORT environment variable":
+'''**Debug Scenario:**
+A developer's SVG animation flickers on scroll because it uses `position: fixed` combined with CSS transforms:
+
+```css
+.svg-overlay {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) rotate(var(--angle));
+  will-change: transform;
+}
+/* When scrolling on iOS Safari: occasional white flicker */
+```
+
+iOS Safari has known issues with `position: fixed` + CSS transforms — particularly when scrolling (the fixed element may repaint unexpectedly). Show: using `position: absolute` with JavaScript positioning for the SVG, avoiding `transform` on `position: fixed` elements (use `top/left` adjustments instead), setting `transform: translateZ(0)` (forces GPU layer, may reduce flicker), and testing in actual iOS Safari vs simulators.''',
+
+'''**Debug Scenario:**
+A developer's WebAssembly module instantiation throws "Wasm code generation disallowed by embedder" in production:
 
 ```ts
-const PORT = 3000; // Hardcoded!
-app.listen(PORT, () => console.log(`Listening on ${PORT}`));
+const wasmModule = await WebAssembly.instantiateStreaming(fetch('/module.wasm'));
+// Error in production: "Wasm code generation disallowed by embedder"
 ```
 
-Cloud Run (and other container platforms) dynamically assign a port via the `PORT` environment variable. Hardcoding 3000 means the container listens on 3000 but the platform sends traffic to the dynamic port. Show: `const PORT = process.env.PORT ?? 3000`, the `0.0.0.0` vs `localhost` binding (`app.listen(PORT, '0.0.0.0')` to accept external connections), and `process.env.PORT` awareness in Docker vs local dev.""",
+The Content Security Policy on the production server has `script-src 'self'` without `'unsafe-eval'` or `'wasm-unsafe-eval'`. WebAssembly JIT compilation is treated as dynamic code generation and blocked by CSP. Show: adding `'wasm-unsafe-eval'` to the `script-src` directive (Chrome 97+, Firefox, Safari), the older `'unsafe-eval'` fallback, and why `'unsafe-eval'` for JS (bad) is distinct from `'wasm-unsafe-eval'` (safer — only allows Wasm JIT, not arbitrary eval).''',
 
-"""**Debug Scenario:**
-A developer's React `key` prop prevents unwanted re-mounts but accidentally causes wanted re-mounts to not happen:
+'''**Debug Scenario:**
+A developer's drag-and-drop implementation stops working on touch devices because it's built with mouse events only:
+
+```ts
+element.addEventListener('mousedown', startDrag);
+document.addEventListener('mousemove', moveDrag);
+document.addEventListener('mouseup', endDrag);
+// Works on desktop. On mobile: no drag at all!
+```
+
+Mobile browsers fire `touch*` events, not `mouse*` events (though some simulate mouse events after touch — causing double-firing). Show: adding parallel `touchstart`, `touchmove`, `touchend` listeners with `e.touches[0]` for coordinates, `e.preventDefault()` in `touchstart` to stop scroll interference, or switching to the `Pointer Events` API (`pointerdown`, `pointermove`, `pointerup`) which unifies mouse and touch (`pointer-events: auto`).''',
+
+'''**Debug Scenario:**
+A developer's `localStorage` write fails silently in Safari's private browsing mode:
+
+```ts
+try {
+  localStorage.setItem('key', 'value');
+} catch (e) {
+  // QuotaExceededError thrown in Safari private mode — even for the first write!
+}
+// App assumes localStorage works and breaks when it doesn't
+```
+
+Safari private mode limits `localStorage` to 0 bytes — any write throws `QuotaExceededError`. Show: wrapping all `localStorage` operations in try/catch, an `isLocalStorageAvailable()` check (`try { localStorage.setItem('__test', '1'); localStorage.removeItem('__test'); return true; } catch { return false; }`), falling back to an in-memory Map, and `sessionStorage` (also limited in private mode).''',
+
+'''**Debug Scenario:**
+A developer's Vitest test fails on Windows CI but passes on Mac because of `path.join` vs forward slashes:
+
+```ts
+// Test imports a file by constructing the path:
+const filePath = `src/components/${componentName}.tsx`;
+// import(filePath) → fails on Windows with ENOENT!
+// Windows expects: 'src\\components\\ComponentName.tsx'
+```
+
+Hardcoded forward slashes in import paths cause issues on Windows. Show: using `path.join('src', 'components', `${componentName}.tsx`)` (OS-aware), `path.resolve(__dirname, ...)` for absolute paths, and the fact that Node.js module resolution actually handles forward slashes on Windows (the issue is usually with `fs` operations, not `import`). Also check for case-sensitivity differences between Mac (case-insensitive) and Linux CI (case-sensitive).''',
+
+'''**Debug Scenario:**
+A developer's `useContext` causes all consumers to re-render when any part of the context value changes:
 
 ```tsx
-<SearchResults key={query} results={filteredResults} />
-// key=query: remounts when query changes ✓ (resets scroll, state)
+const AppContext = createContext({ user: null, theme: 'light', locale: 'en', notifications: [] });
 
-// But:
-<UserProfile key={activeTab} userId={userId} />
-// key=activeTab: remounts when tab changes (fine)
-// BUT also remounts when userId changes (userId is not in the key!)
-// When userId changes, the component should reset — key doesn't change!
+function Layout() {
+  const [notifications, setNotifications] = useState([]);
+  const [user, setUser] = useState(null);
+
+  return (
+    <AppContext.Provider value={{ user, notifications, theme: 'light', locale: 'en' }}>
+      {/* New object every render → ALL consumers re-render even if user didn't change */}
+      <ThemeToggle />     {/* Only needs theme */}
+      <UserAvatar />      {/* Only needs user */}
+      <NotifBadge />      {/* Only needs notifications */}
+    </AppContext.Provider>
+  );
+}
 ```
 
-Show: including all relevant "reset triggers" in the key (`key={`${userId}-${activeTab}`}`), and understanding that `key` changes force a full remount (new DOM, new state, new refs — expensive for complex components). Alternative: `useEffect([userId], resetState)` for soft resets without remounting.""",
+A single monolithic context causes unnecessary re-renders. Show: splitting into separate contexts (`ThemeContext`, `UserContext`, `NotifContext`) each with its own provider, `useMemo` for the context value (`useMemo(() => ({ user, notifications }), [user, notifications])`), and `use-context-selector` library for selector-based subscriptions.''',
 
-"""**Debug Scenario:**
-A developer's Prisma query returns records from a soft-deleted table because they forgot to add the `deletedAt: null` filter:
+'''**Debug Scenario:**
+A developer's environment variables are undefined at runtime in a Vite React app but defined in `.env`:
 
 ```ts
-// Model has: deletedAt DateTime? (soft deletes — null = not deleted)
-const users = await prisma.user.findMany({
-  where: { role: 'admin' },
-  // Missing: deletedAt: null!
-});
-// Returns deleted admins!
+// .env:
+SECRET_KEY=abc123
+VITE_API_URL=https://api.example.com
+
+// Component:
+console.log(import.meta.env.SECRET_KEY);   // undefined!
+console.log(import.meta.env.VITE_API_URL); // "https://api.example.com" ✓
 ```
 
-Show: adding `deletedAt: null` to all queries, implementing a Prisma middleware/extension that automatically adds `WHERE deletedAt IS NULL` to all findMany queries, and `prisma.$extends({ query: { user: { findMany({ args, query }) { args.where = { ...args.where, deletedAt: null }; return query(args); } } } })`.""",
+Vite only exposes env variables prefixed with `VITE_` to the browser (for security — don't expose server secrets). Variables without the prefix remain server-only. Show: renaming to `VITE_SECRET_KEY` (not recommended for secrets), using server-side env for sensitive values, `import.meta.env.MODE` (`'development'` or `'production'`), and `VITE_` prefix convention vs `NEXT_PUBLIC_` in Next.js.''',
 
 ]

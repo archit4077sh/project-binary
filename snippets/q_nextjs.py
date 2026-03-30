@@ -1,726 +1,870 @@
 """
-snippets/q_nextjs.py — BATCH 6: 56 brand-new Next.js questions
-Zero overlap with batches 1-5 archives.
+snippets/q_nextjs.py — BATCH 7: 56 brand-new Next.js questions
+Zero overlap with batches 1-6 archives.
 """
 
 Q_NEXTJS = [
 
-"""**Task (Code Generation):**
-Implement a Next.js App Router layout with per-page metadata and Open Graph images:
+'''**Task (Code Generation):**
+Implement a Next.js App Router layout that uses Parallel Routes for a dashboard with independent loading states:
 
-```ts
-// app/blog/[slug]/page.tsx
-export async function generateMetadata({ params }: Props): Promise<Metadata> {
-  const post = await getPost(params.slug);
-  return {
-    title: post.title,
-    description: post.excerpt,
-    openGraph: {
-      title: post.title,
-      description: post.excerpt,
-      images: [{ url: `/api/og?title=${encodeURIComponent(post.title)}`, width: 1200, height: 630 }],
-    },
-    twitter: { card: 'summary_large_image' },
-    alternates: { canonical: `https://blog.example.com/${params.slug}` },
-  };
+```
+app/
+  dashboard/
+    layout.tsx          ← Root layout with @team and @revenue slots
+    @team/
+      page.tsx          ← Team metrics (slow query ~2s)
+      loading.tsx
+    @revenue/
+      page.tsx          ← Revenue chart (fast query ~200ms)
+      loading.tsx
+    page.tsx            ← Default (empty/redirect)
+```
+
+```tsx
+// layout.tsx:
+export default function DashboardLayout({
+  children,
+  team,
+  revenue,
+}: { children: React.ReactNode; team: React.ReactNode; revenue: React.ReactNode }) {
+  return (
+    <section className="dashboard-grid">
+      <Suspense fallback={<TeamSkeleton />}>{team}</Suspense>
+      <Suspense fallback={<RevenueSkeleton />}>{revenue}</Suspense>
+    </section>
+  );
 }
 ```
 
-Show: the `generateMetadata` async function pattern, the dynamic OG image API route using `ImageResponse` from `next/og`, font loading for the OG image, and `robots` metadata for disabling indexing on draft posts.""",
+Show: the `@folder` naming convention, `default.tsx` required for non-matching slots, independent streaming (revenue appears at 200ms, team at 2s without blocking each other), and URL independence (each slot can navigate independently via Intercepting Routes).''',
 
-"""**Task (Code Generation):**
-Build a Next.js rate limiter middleware using Redis Sliding Window:
+'''**Task (Code Generation):**
+Build a Next.js `generateStaticParams` for a deeply nested dynamic route:
+
+```
+app/
+  blog/
+    [slug]/
+      page.tsx
+  docs/
+    [version]/
+      [...slug]/         ← Catch-all
+        page.tsx
+```
 
 ```ts
-// middleware.ts
-export async function middleware(req: NextRequest) {
-  const ip = req.ip ?? req.headers.get('x-forwarded-for') ?? 'unknown';
-  const key = `rate:${ip}:${Math.floor(Date.now() / 60_000)}`; // per-minute window
+// docs/[version]/[...slug]/page.tsx:
+export async function generateStaticParams() {
+  const versions = ['v1', 'v2', 'v3'];
+  const allPaths: { version: string; slug: string[] }[] = [];
 
-  const count = await redis.incr(key);
-  if (count === 1) await redis.expire(key, 60);
-
-  if (count > 100) {
-    return NextResponse.json({ error: 'Too many requests' }, {
-      status: 429,
-      headers: { 'Retry-After': '60', 'X-RateLimit-Limit': '100' },
+  for (const version of versions) {
+    const pages = await getDocPages(version);
+    pages.forEach(page => {
+      allPaths.push({ version, slug: page.path.split('/').filter(Boolean) });
     });
   }
-  return NextResponse.next({ headers: { 'X-RateLimit-Remaining': String(100 - count) } });
+
+  return allPaths;
 }
 ```
 
-Show: the Upstash Redis `@upstash/ratelimit` library as a simpler alternative, sliding window vs fixed window trade-offs, configuring `matcher` to apply only to API routes, and using `req.geo` for country-specific rate limits.""",
+Show: the `params` type for catch-all routes (`slug: string[]`), using `dynamicParams = false` to 404 on unknown paths (vs `dynamicParams = true` to SSR them), and `generateStaticParams` at the layout level for shared outer params.''',
 
-"""**Task (Code Generation):**
-Implement a Next.js App Router error handling hierarchy with typed error pages:
+'''**Task (Code Generation):**
+Implement a `routeSegmentConfig` export pattern for granular caching control per route:
+
+```tsx
+// app/api/products/route.ts — Dynamic, no cache:
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
+// app/api/categories/route.ts — ISR with tags:
+export const revalidate = 3600;
+export const fetchCache = 'force-cache';
+
+export async function GET() {
+  const categories = await fetch('https://api.example.com/categories', {
+    next: { tags: ['categories'], revalidate: 3600 },
+  });
+  return Response.json(await categories.json());
+}
+
+// On category update (admin action):
+import { revalidateTag } from 'next/cache';
+revalidateTag('categories'); // Invalidates all cached fetches with this tag
+```
+
+Show: the complete set of route segment config exports (`dynamic`, `dynamicParams`, `revalidate`, `fetchCache`, `runtime`, `preferredRegion`), the `revalidateTag` vs `revalidatePath` difference, and the App Router's per-fetch caching granularity.''',
+
+'''**Task (Code Generation):**
+Build a Next.js middleware chain with multiple independent middlewares:
 
 ```ts
-// app/error.tsx — catches client-side + RSC errors
+// middleware.ts — Chain approach since Next.js only supports one middleware file:
+import { chain } from '@/lib/middleware-chain';
+import { authMiddleware } from './middlewares/auth';
+import { localeMiddleware } from './middlewares/locale';
+import { rateLimiterMiddleware } from './middlewares/rate-limit';
+import { securityHeadersMiddleware } from './middlewares/security';
+
+export default chain([
+  securityHeadersMiddleware,  // Add HSTS, CSP, XFO headers
+  rateLimiterMiddleware,       // Rate limit before auth
+  authMiddleware,              // Validate session
+  localeMiddleware,            // Detect and redirect locale
+]);
+
+export const config = {
+  matcher: ['/((?!_next/static|_next/image|favicon.ico).*)'],
+};
+```
+
+Show: the `chain` helper that sequences middlewares (each calls `NextResponse.next()` or returns early), a `compose(middlewares)` implementation, and passing data between middlewares via `request.headers` set (`NextResponse.next({ request: { headers: newHeaders } })`).''',
+
+'''**Task (Code Generation):**
+Implement a Next.js Server Action with optimistic updates and error recovery:
+
+```tsx
+'use server';
+export async function toggleTodo(id: string, currentDone: boolean) {
+  const updated = await db.todo.update({
+    where: { id },
+    data: { done: !currentDone },
+  });
+  revalidatePath('/todos');
+  return updated;
+}
+
+// Client component:
 'use client';
-export default function ErrorPage({ error, reset }: { error: Error & { digest?: string }; reset: () => void }) {
+function TodoItem({ todo }: { todo: Todo }) {
+  const [optimisticTodo, addOptimistic] = useOptimistic(
+    todo,
+    (state, done: boolean) => ({ ...state, done })
+  );
+
   return (
-    <div>
-      <h2>Something went wrong</h2>
-      <p>{error.message}</p>
-      <button onClick={reset}>Try again</button>
-    </div>
+    <form action={async () => {
+      addOptimistic(!optimisticTodo.done); // Optimistic update
+      await toggleTodo(todo.id, todo.done);
+    }}>
+      <label>
+        <input type="checkbox" checked={optimisticTodo.done} readOnly />
+        {todo.text}
+      </label>
+      <button type="submit">Toggle</button>
+    </form>
   );
 }
-
-// app/not-found.tsx — renders for 404s
-// app/global-error.tsx — catches root layout errors
 ```
 
-Show: the `error.tsx` client component requirement (must be `'use client'`), `error.digest` (server-side error identifier that doesn't leak details), `global-error.tsx` requiring its own `<html>` and `<body>`, and how `reset()` re-renders the segment trying the original render.""",
+Show: React 19's `useOptimistic`, the `action` attribute on `<form>` for progressive enhancement (works without JS), `revalidatePath` for cache invalidation, and `useFormStatus` for showing pending state during the server action.''',
 
-"""**Task (Code Generation):**
-Build a Next.js App Router authentication flow using `next-auth` v5 (Auth.js):
-
-```ts
-// auth.ts
-export const { auth, signIn, signOut, handlers } = NextAuth({
-  providers: [
-    GitHub({ clientId: process.env.AUTH_GITHUB_ID, clientSecret: process.env.AUTH_GITHUB_SECRET }),
-    Credentials({
-      authorize: async (credentials) => {
-        const user = await db.users.findByEmail(credentials.email as string);
-        if (!user || !await bcrypt.compare(credentials.password as string, user.passwordHash)) return null;
-        return { id: user.id, email: user.email, name: user.name };
-      },
-    }),
-  ],
-  callbacks: {
-    jwt({ token, user }) {
-      if (user) token.role = user.role;
-      return token;
-    },
-    session({ session, token }) {
-      session.user.role = token.role as string;
-      return session;
-    },
-  },
-});
-```
-
-Show: the App Router route handler (`app/api/auth/[...nextauth]/route.ts`), middleware authentication check, protecting Server Components with `await auth()`, and the `session.user.role` TypeScript augmentation.""",
-
-"""**Task (Code Generation):**
-Implement a Next.js App Router with Stripe webhooks handling payment events:
+'''**Task (Code Generation):**
+Build a Next.js App Router authentication system using Iron Session:
 
 ```ts
-// app/api/webhooks/stripe/route.ts
+// lib/session.ts:
+import { getIronSession } from 'iron-session';
+
+export async function getSession(req: Request | NextRequest, res: Response | NextResponse) {
+  return getIronSession<SessionData>(req, res, {
+    password: process.env.SESSION_SECRET!,
+    cookieName: 'app-session',
+    cookieOptions: {
+      secure: process.env.NODE_ENV === 'production',
+      httpOnly: true,
+      sameSite: 'lax',
+      maxAge: 60 * 60 * 24 * 7, // 1 week
+    },
+  });
+}
+
+// Route Handler:
 export async function POST(req: Request) {
-  const body = await req.text(); // raw body for signature verification
-  const signature = req.headers.get('stripe-signature')!;
-
-  let event: Stripe.Event;
-  try {
-    event = stripe.webhooks.constructEvent(body, signature, process.env.STRIPE_WEBHOOK_SECRET!);
-  } catch (err) {
-    return Response.json({ error: 'Invalid signature' }, { status: 400 });
-  }
-
-  switch (event.type) {
-    case 'payment_intent.succeeded':
-      await handlePaymentSuccess(event.data.object as Stripe.PaymentIntent);
-      break;
-    case 'customer.subscription.deleted':
-      await cancelSubscription((event.data.object as Stripe.Subscription).id);
-      break;
-  }
-
-  return Response.json({ received: true });
+  const session = await getSession(req, new Response());
+  const { email, password } = await req.json();
+  const user = await validateCredentials(email, password);
+  if (!user) return Response.json({ error: 'Invalid credentials' }, { status: 401 });
+  session.userId = user.id;
+  session.role = user.role;
+  await session.save();
+  return Response.json({ user: { id: user.id, email: user.email } });
 }
 ```
 
-Show: disabling Next.js body parsing (`export const config = { api: { bodyParser: false } }` in Pages Router) vs raw body in App Router, idempotency (use `event.id` to prevent double-processing), and storing the webhook event in DB before processing.""",
+Show: Iron Session's encrypted cookie (server-side session data encrypted in the cookie), `getServerSideSession` in RSC, and the middleware pattern for protecting routes.''',
 
-"""**Task (Code Generation):**
-Build a Next.js App Router with typed Server Actions and optimistic UI:
+'''**Task (Code Generation):**
+Implement a Next.js `notFound` and `redirect` pattern with proper status codes:
 
 ```ts
-// actions.ts
-'use server';
-export async function createPost(formData: FormData): Promise<ActionResult> {
-  const title = formData.get('title') as string;
-  const validated = PostSchema.safeParse({ title });
-  if (!validated.success) return { error: validated.error.flatten().fieldErrors };
-  const post = await db.posts.create({ data: { title, authorId: await getCurrentUserId() } });
-  revalidatePath('/posts');
-  return { success: true, post };
+// app/products/[slug]/page.tsx:
+import { notFound, redirect } from 'next/navigation';
+
+export default async function ProductPage({ params }: { params: { slug: string } }) {
+  const product = await db.product.findUnique({ where: { slug: params.slug } });
+
+  if (!product) notFound();  // Renders the nearest not-found.tsx
+
+  if (product.redirectTo) {
+    redirect(`/products/${product.redirectTo}`);  // 307 temporary in RSC
+    // permanentRedirect(`/products/${product.redirectTo}`); // 308 permanent
+  }
+
+  return <ProductDetail product={product} />;
 }
 
-// In Client Component:
-const [optimisticPosts, addOptimistic] = useOptimistic(posts, (state, newPost) => [...state, newPost]);
+// app/products/not-found.tsx:
+export default function NotFound() {
+  return <div><h2>Product Not Found</h2><Link href="/products">Browse Products</Link></div>;
+}
 ```
 
-Show: `useOptimistic` rollback when the action fails, `useFormState` (React 19: `useActionState`) to read server action result, `revalidatePath` vs `revalidateTag` for cache invalidation, and Zod validation within a Server Action.""",
+Show: `notFound()` throws a special error caught by the nearest `not-found.tsx`, `redirect()` throwing a special error (must not be in try/catch), `permanentRedirect()` for 308, and catching `notFound` and `redirect` in error boundaries.''',
 
-"""**Task (Code Generation):**
-Implement a Next.js App Router multi-tenant application with subdomain routing:
+'''**Task (Code Generation):**
+Build a Next.js image optimization pipeline with `next/image` and custom loader:
+
+```tsx
+// Custom loader for Cloudinary:
+const cloudinaryLoader = ({ src, width, quality }: ImageLoaderProps) =>
+  `https://res.cloudinary.com/${process.env.NEXT_PUBLIC_CLOUDINARY_ID}/image/upload` +
+  `/f_auto,c_limit,w_${width},q_${quality ?? 'auto'}` +
+  `/${src}`;
+
+<Image
+  loader={cloudinaryLoader}
+  src="products/hero.jpg"
+  alt="Product hero"
+  width={1200}
+  height={630}
+  priority              // LCP image — preload it
+  sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+  placeholder="blur"
+  blurDataURL={product.lqip}
+/>
+```
+
+Show: the `sizes` attribute for responsive images (srcset generation), `priority` for LCP images (adds `<link rel="preload">`), custom loader returning the correct CDN URL, and `next.config.js`'s `images.domains` vs `images.remotePatterns`.''',
+
+'''**Task (Code Generation):**
+Implement a Next.js App Router multi-tenant setup using subdomain routing in middleware:
 
 ```ts
-// middleware.ts
+// middleware.ts:
 export function middleware(req: NextRequest) {
-  const hostname = req.headers.get('host')!;
-  const subdomain = hostname.split('.')[0];
+  const host = req.headers.get('host') ?? '';
+  const subdomain = host.split('.')[0];
 
-  // Map subdomain to tenant ID
-  const tenantId = subdomain !== 'www' ? subdomain : null;
-
-  if (tenantId) {
+  // Rewrite the URL to the tenant-specific route:
+  if (subdomain !== 'www' && subdomain !== 'app') {
     const url = req.nextUrl.clone();
-    url.pathname = `/tenant/${tenantId}${url.pathname}`;
+    url.pathname = `/tenants/${subdomain}${url.pathname}`;
     return NextResponse.rewrite(url);
   }
-  return NextResponse.next();
-}
-```
-
-Show: `app/tenant/[tenantId]/layout.tsx` for tenant-specific layout, fetching tenant branding in the layout, setting `x-tenant-id` request header for Server Components downstream, validating the tenant exists (redirect to 404 if not), and wildcard DNS configuration.""",
-
-"""**Task (Code Generation):**
-Build a Next.js App Router with a full-text search API using Algolia:
-
-```ts
-// app/api/search/route.ts
-export async function GET(req: Request) {
-  const { searchParams } = new URL(req.url);
-  const query = searchParams.get('q') ?? '';
-  const page = Number(searchParams.get('page') ?? '0');
-
-  const { hits, nbHits, nbPages } = await algolia.search<Product>(query, {
-    indexName: 'products',
-    hitsPerPage: 20,
-    page,
-    filters: searchParams.get('category') ? `category:${searchParams.get('category')}` : undefined,
-    attributesToHighlight: ['name', 'description'],
-    snippetEllipsisText: '…',
-  });
-
-  return Response.json({ hits, total: nbHits, pages: nbPages });
-}
-```
-
-Show: the Algolia `v4` client initialization, Server Component usage of the InstantSearch result hook, reindexing products on DB change via a webhook, and the `<Highlight>` component for displaying search term highlights.""",
-
-"""**Task (Code Generation):**
-Implement a Next.js App Router page with server-side caching strategies:
-
-```ts
-// Cached for 10 minutes, tagged for on-demand revalidation:
-const getProducts = unstable_cache(
-  async () => db.products.findMany({ orderBy: { createdAt: 'desc' } }),
-  ['products-list'],
-  { revalidate: 600, tags: ['products'] }
-);
-
-// In Server Component:
-const products = await getProducts();
-
-// On product update (Server Action or API route):
-revalidateTag('products'); // invalidates all caches tagged 'products'
-```
-
-Show: `unstable_cache` function signature, the difference between `revalidate` (time-based) and `tags` (on-demand), `fetch` with `next.revalidate` and `next.tags` options, and the caching layers (Router Cache → Full Route Cache → Data Cache).""",
-
-"""**Task (Code Generation):**
-Build a Next.js internationalised app with `next-intl` and locale-based routing:
-
-```ts
-// i18n.ts
-export default getRequestConfig(async ({ locale }) => ({
-  messages: (await import(`./messages/${locale}.json`)).default,
-}));
-
-// app/[locale]/layout.tsx
-export async function generateStaticParams() {
-  return ['en', 'de', 'fr', 'ja'].map(locale => ({ locale }));
 }
 
-// Usage: t('products.addToCart') → 'Add to Cart' (en) / 'In den Warenkorb' (de)
+// app/tenants/[tenant]/page.tsx handles the rewritten URL
+// The user sees: acme.example.com/dashboard
+// Next.js serves: example.com/tenants/acme/dashboard
 ```
 
-Show: the `next-intl` middleware for locale detection (Accept-Language header, cookie, URL prefix), `useTranslations` vs server-side `getTranslations()`, number and date formatting with ICU format strings, and pluralization (`{count, plural, one {# item} other {# items}}`).""",
+Show: `NextResponse.rewrite()` (changes the URL internally without redirecting the browser), extracting the subdomain from the `host` header, `x-forwarded-host` handling in production (behind a proxy), and split-tenancy (tenant-specific layout at `app/tenants/[tenant]/layout.tsx`).''',
 
-"""**Task (Code Generation):**
-Implement a Next.js App Router with a real-time notification system using Server-Sent Events:
+'''**Task (Code Generation):**
+Build a Next.js 14 Route Handler with request body streaming and edge runtime:
 
 ```ts
-// app/api/notifications/stream/route.ts
-export async function GET(req: Request) {
-  const stream = new ReadableStream({
-    start(controller) {
-      const send = (data: object) => {
-        controller.enqueue(`data: ${JSON.stringify(data)}\n\n`);
-      };
-
-      const unsub = notificationService.subscribe(userId, send);
-      req.signal.addEventListener('abort', () => {
-        unsub();
-        controller.close();
-      });
-    },
-  });
-
-  return new Response(stream, {
-    headers: {
-      'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache, no-transform',
-      'Connection': 'keep-alive',
-    },
-  });
-}
-```
-
-Show: the client-side `EventSource` hook, reconnection logic with `EventSource`, SSE vs WebSocket trade-offs (SSE is unidirectional, HTTP/2 multiplexed), and handling backpressure in high-volume scenarios.""",
-
-"""**Task (Code Generation):**
-Build a Next.js App Router with database migrations managed by Drizzle ORM:
-
-```ts
-// drizzle/schema.ts
-export const users = pgTable('users', {
-  id:        uuid('id').primaryKey().defaultRandom(),
-  email:     text('email').notNull().unique(),
-  name:      text('name').notNull(),
-  role:      text('role', { enum: ['admin', 'user'] }).notNull().default('user'),
-  createdAt: timestamp('created_at').notNull().defaultNow(),
-});
-
-// drizzle.config.ts
-export default defineConfig({
-  schema: './drizzle/schema.ts',
-  out:    './drizzle/migrations',
-  driver: 'pg',
-  dbCredentials: { connectionString: process.env.DATABASE_URL! },
-});
-```
-
-Show: running `drizzle-kit generate:pg` to create migration files, `drizzle-kit push` for development, running migrations at startup in production, typed query builder (`db.select().from(users).where(eq(users.role, 'admin'))`), and the `relations` API for joins.""",
-
-"""**Task (Code Generation):**
-Implement a Next.js App Router with file upload to S3 using presigned URLs:
-
-```ts
-// app/api/upload/presign/route.ts
-export async function POST(req: Request) {
-  const { filename, contentType, size } = await req.json();
-
-  if (size > 10 * 1024 * 1024) return Response.json({ error: 'File too large' }, { status: 413 });
-  if (!ALLOWED_TYPES.includes(contentType)) return Response.json({ error: 'Invalid type' }, { status: 400 });
-
-  const key = `uploads/${randomUUID()}/${filename}`;
-  const command = new PutObjectCommand({ Bucket: process.env.S3_BUCKET, Key: key, ContentType: contentType });
-  const presignedUrl = await getSignedUrl(s3Client, command, { expiresIn: 300 });
-
-  return Response.json({ presignedUrl, key, expiresIn: 300 });
-}
-```
-
-Show: the client-side upload (PUT directly to S3 using the presigned URL), progress tracking with `XMLHttpRequest`, saving the S3 key in the database after successful upload, and post-upload image processing (trigger a Lambda or Server Action to resize the image).""",
-
-"""**Task (Code Generation):**
-Build a Next.js App Router with role-based access control (RBAC) middleware:
-
-```ts
-// middleware.ts
-const ROUTE_PERMISSIONS: Record<string, Role[]> = {
-  '/admin':    ['admin'],
-  '/manager':  ['admin', 'manager'],
-  '/api/admin': ['admin'],
-};
-
-export async function middleware(req: NextRequest) {
-  const session = await auth();
-  const pathname = req.nextUrl.pathname;
-
-  const matchedRoute = Object.entries(ROUTE_PERMISSIONS)
-    .find(([route]) => pathname.startsWith(route));
-
-  if (matchedRoute && !matchedRoute[1].includes(session?.user?.role as Role)) {
-    return NextResponse.redirect(new URL('/unauthorized', req.url));
-  }
-  return NextResponse.next();
-}
-```
-
-Show: the `auth()` function from Auth.js in middleware, caching the session to avoid repeated JWT decoding, the glob pattern alternative for route matching, and a `hasPermission(session, action, resource)` utility for fine-grained permissions within Server Components.""",
-
-"""**Task (Code Generation):**
-Implement a Next.js App Router with background jobs using Queue (BullMQ + Redis):
-
-```ts
-// lib/queue.ts
-export const emailQueue = new Queue('emails', { connection });
-
-export const emailWorker = new Worker('emails', async (job) => {
-  const { to, subject, html } = job.data;
-  await resend.emails.send({ from: 'noreply@example.com', to, subject, html });
-}, { connection, concurrency: 5 });
-
-// In a Server Action:
-await emailQueue.add('welcome', { to: user.email, subject: 'Welcome!', html: welcomeHtml }, {
-  attempts: 3,
-  backoff: { type: 'exponential', delay: 5_000 },
-  removeOnComplete: { count: 1000 },
-});
-```
-
-Show: the BullMQ `Queue` setup, `Worker` with concurrency, retry with exponential backoff, `removeOnFail: { count: 100 }` to keep failed job logs, a Bull Board dashboard route for monitoring (`app/admin/queues/route.ts`), and using `jobId` for deduplication.""",
-
-# ── Debugging ─────────────────────────────────────────────────────────────────
-
-"""**Debug Scenario:**
-A Next.js App Router page throws "Error: Async Server Component used in Client Component" in production but not locally:
-
-```tsx
-// parent.tsx (Client Component! has 'use client'):
-'use client';
-import { DataDisplay } from './data-display'; // DataDisplay is an async Server Component
-
-export function Parent() {
-  return <DataDisplay />; // Error in production
-}
-```
-
-Client Components cannot render async Server Components directly — they'd need to be hydrated on the client, but Server Components with async are server-only. Show: passing the Server Component's output as `children` prop to the Client Component (`<Parent><DataDisplay /></Parent>`), the "interleaving" pattern, and why this works (the Server Component renders to RSC payload before the Client Component hydrates).""",
-
-"""**Debug Scenario:**
-A Next.js App Router route that reads from a database returns stale data after an update:
-
-```ts
-// Server Component:
-const posts = await db.posts.findMany(); // Returns stale data after create!
-
-// Server Action that creates a post:
-'use server';
-async function createPost(data) {
-  await db.posts.create({ data });
-  // Forgot to revalidate!
-}
-```
-
-Next.js App Router caches Server Component data. Without revalidation, updated data doesn't appear. Show: adding `revalidatePath('/posts')` after the create in the Server Action, using `revalidateTag('posts')` for finer control, `noStore()` to opt the component out of caching entirely for always-fresh data, and the caching layer difference between `fetch` caching and the Router Cache.""",
-
-"""**Debug Scenario:**
-A Next.js API route using the `edge` runtime throws "crypto is not defined":
-
-```ts
+// app/api/transform/route.ts:
 export const runtime = 'edge';
 
-import crypto from 'node:crypto'; // Works in Node.js runtime, not Edge!
-export async function GET() {
-  const hash = crypto.createHash('sha256').update('data').digest('hex');
+export async function POST(req: Request) {
+  if (!req.body) return Response.json({ error: 'No body' }, { status: 400 });
+
+  const transform = new TransformStream({
+    transform(chunk, controller) {
+      const text = new TextDecoder().decode(chunk);
+      const upper = text.toUpperCase();
+      controller.enqueue(new TextEncoder().encode(upper));
+    },
+  });
+
+  req.body.pipeThrough(transform);
+
+  return new Response(transform.readable, {
+    headers: { 'Content-Type': 'text/plain', 'Transfer-Encoding': 'chunked' },
+  });
 }
 ```
 
-The Edge Runtime doesn't support Node.js built-ins like `node:crypto`. Show: using the Web Crypto API instead (`crypto.subtle.digest('SHA-256', ...)` — globally available in Edge), the list of what's available in Edge Runtime (Fetch, TextEncoder, Streams, Web Crypto), switching to the Node.js runtime for routes that need Node APIs, and the performance trade-off (Edge: lower latency globally, Node: full API access).""",
+Show: `export const runtime = 'edge'` for Edge Runtime (Vercel Edge Functions), streaming request and response bodies, `TransformStream` for real-time data transformation, the Edge Runtime limitations (no Node.js built-ins), and when to use Edge vs Node.js runtime.''',
 
-"""**Debug Scenario:**
-A Next.js `getServerSideProps` fetches user data but throws "Headers already sent" after a redirect:
+'''**Task (Code Generation):**
+Implement a Next.js `generateMetadata` with OpenGraph images using the `ImageResponse` API:
 
 ```ts
-export async function getServerSideProps({ req, res }) {
-  const session = await getSession({ req });
-  if (!session) {
-    res.redirect(302, '/login'); // Direct res.redirect usage
-    return { props: {} };       // BUG: still returns props AFTER redirect!
-  }
-  const user = await fetchUser(session.userId);
-  return { props: { user } };
-}
-```
+// app/blog/[slug]/opengraph-image.tsx:
+import { ImageResponse } from 'next/og';
 
-`res.redirect()` sends the redirect response immediately, but the code continues executing and returns `{ props: {} }`, attempting to write additional response data. Show: using the Next.js redirect pattern (`return { redirect: { destination: '/login', permanent: false } }`) instead of `res.redirect()`, which prevents double-write.""",
+export const runtime = 'edge';
+export const size = { width: 1200, height: 630 };
+export const contentType = 'image/png';
 
-"""**Debug Scenario:**
-A Next.js App Router Server Component reads `cookies()` but throws "cookies() should not be called outside a request scope":
+export default async function OGImage({ params }: { params: { slug: string } }) {
+  const post = await getPost(params.slug);
+  const font = await fetch(new URL('/fonts/Inter-Bold.ttf', baseURL)).then(r => r.arrayBuffer());
 
-```ts
-// lib/auth.ts — module-level, runs at import time!
-const session = cookies().get('session'); // Error!
-
-export async function getUser() {
-  return db.users.find(session?.value);
-}
-```
-
-Dynamic functions like `cookies()`, `headers()`, and `searchParams` must be called inside a Server Component or Server Action — not at module level (which runs during build). Show: moving `cookies()` inside the `getUser()` function body, understanding that module-level code runs once at build time (for static pages), and the `unstable_noStore()` call that opts a component into dynamic rendering.""",
-
-"""**Debug Scenario:**
-A Next.js app deployed to Vercel has Client Components that reference `process.env.MY_SECRET` — the secret is exposed in the browser bundle:
-
-```tsx
-'use client';
-// BUG: Client Components are bundled for the browser!
-const apiKey = process.env.MY_API_KEY; // bundled into client JS!
-```
-
-Any `process.env` variable referenced in a Client Component is inlined into the browser bundle at build time. Show: moving sensitive API calls to Server Components, Server Actions, or API routes, only using `NEXT_PUBLIC_` prefixed variables in Client Components, and the `server-only` package that throws at build time if a server module is imported client-side.""",
-
-"""**Debug Scenario:**
-A Next.js App Router layout with a `Suspense` boundary around a slow Server Component causes the entire layout to delay before streaming:
-
-```tsx
-// app/layout.tsx
-export default function Layout({ children }) {
-  const slowData = await getSlowData(); // 2s — blocks entire layout stream!
-  return <html><body><Header data={slowData} />{children}</body></html>;
-}
-```
-
-`await` in the root layout blocks all streaming — no content is sent until `getSlowData` resolves. Show: moving the slow data fetch into a separate Server Component inside a `Suspense` boundary, ensuring the layout itself returns HTML immediately (without awaiting), and the `Promise` + read pattern for parallel data loading in Server Components.""",
-
-"""**Debug Scenario:**
-A Next.js App Router build fails with "Dynamic server usage: Page couldn't be rendered statically" for a page that dynamically reads `headers()`:
-
-```ts
-// app/analytics/page.tsx
-export default async function Page() {
-  const userAgent = (await headers()).get('user-agent'); // forces dynamic
-  return <Analytics ua={userAgent} />;
-}
-```
-
-Reading `headers()` makes the page dynamic (opts out of SSG). If the build attempts to statically generate the page, it fails. Show: adding `export const dynamic = 'force-dynamic'` to the page, or moving the User-Agent read to a Server Action / API route, using `Suspense` to defer the dynamic portion while the static shell renders, and the `generateStaticParams` interaction with dynamic pages.""",
-
-"""**Debug Scenario:**
-A Next.js App Router API route returns `response.json()` parsed output rather than the raw `Response.json()` output, causing a "body used already" error on retry:
-
-```ts
-export async function GET() {
-  const data = await fetch('https://api.third-party.com/data');
-  return Response.json(await data.json()); // Works once, but...
-}
-```
-
-The `Response` body is a `ReadableStream` and can only be consumed once. If the route retries or the response is read twice (logging + return), it fails. Show: storing the parsed JSON (`const json = await data.json()`), returning `Response.json(json)`, and using `data.clone()` if the body must be read twice.""",
-
-"""**Debug Scenario:**
-A Next.js App Router page with `generateStaticParams` builds successfully but clicking a dynamic route in production returns a 404:
-
-```ts
-export async function generateStaticParams() {
-  return [{ slug: 'hello-world' }, { slug: 'getting-started' }];
-}
-
-// User navigates to /blog/new-post (not in generateStaticParams) → 404
-```
-
-`generateStaticParams` only pre-generates listed slugs. Unknown slugs return 404 by default. Show: setting `export const dynamicParams = true` in the page to allow on-demand ISR for unknown slugs, using `revalidate` for ISR timing, and the different behaviors: `dynamicParams = true` (ISR fallback), `dynamicParams = false` (404 for unknown slugs).""",
-
-"""**Debug Scenario:**
-A developer wraps every `fetch()` call in Next.js API routes with `try/catch` but HTTP errors (404, 500 from external API) are not being caught:
-
-```ts
-try {
-  const res = await fetch('https://api.example.com/data');
-  const data = await res.json(); // Doesn't throw for 404!
-  return Response.json(data);
-} catch (err) {
-  return Response.json({ error: 'Failed' }, { status: 500 });
-}
-```
-
-`fetch()` only rejects `Promise` for network errors (no internet, DNS failure). HTTP error status codes (4xx, 5xx) resolve successfully. Show: checking `res.ok` or `res.status` after fetch: `if (!res.ok) throw new Error(`HTTP ${res.status}`)`, and a `fetchWithThrow` utility wrapper that throws for non-OK responses.""",
-
-"""**Debug Scenario:**
-A Next.js middleware modifies the response headers but the modifications don't appear in the browser:
-
-```ts
-export function middleware(req: NextRequest) {
-  const response = NextResponse.next();
-  response.headers.set('X-Custom-Header', 'my-value');
-  return response;
-}
-```
-
-`NextResponse.next()` creates a new response object. Headers set on it ARE forwarded to the origin response, but the origin response (from the page) may overwrite them. Show: using `NextResponse.next({ headers: { 'X-Custom-Header': 'my-value' } })` (sets request headers forwarded to the origin), using `response.headers.set` on the response from the origin, and the difference between request headers (forwarded to origin) and response headers (sent to browser).""",
-
-"""**Debug Scenario:**
-A Next.js App Router page using `React.cache` for request deduplication doesn't deduplicate calls across different Server Components:
-
-```ts
-// lib/data.ts
-export const getUser = React.cache(async (id: string) => db.users.findUnique({ where: { id } }));
-
-// layout.tsx → calls getUser('u1')
-// page.tsx   → calls getUser('u1') again
-// Both calls hit the DB!
-```
-
-`React.cache` deduplicates within the same request scope — but the layout and page may run in different React server rendering passes. Show: verifying `React.cache` works within the same Server Component tree branch (not across independent trees), using `unstable_cache` as an alternative that caches across requests (with tag-based invalidation), and logging the number of DB calls with Prisma query events.""",
-
-"""**Debug Scenario:**
-A Next.js app's static export (`next export`) fails because the app uses `getServerSideProps`:
-
-```ts
-export async function getServerSideProps(ctx) {
-  const data = await fetchData();
-  return { props: { data } };
-}
-// Error: "getServerSideProps" is not compatible with "next export"
-```
-
-`next export` generates a fully static HTML/CSS/JS app — it can't run server-side code. `getServerSideProps` requires a server at runtime. Show: replacing with `getStaticProps` for data available at build time, using `getStaticProps` + `revalidate` for ISR (not compatible with pure static export), client-side fetching with SWR as the export-compatible alternative, and the `output: 'export'` config in Next.js 13+.""",
-
-"""**Debug Scenario:**
-A developer uses `next/link` with `prefetch={false}` to prevent prefetching, but navigation to the route is still slow after the first visit:
-
-```tsx
-<Link href="/heavy-page" prefetch={false}>Heavy Page</Link>
-```
-
-Disabling `prefetch` prevents the page's JS from being pre-downloaded on hover/viewport entry. But slow navigation after the first visit suggests the data fetch on the page is slow, not the JS download. Show: distinguishing between navigation speed (JS chunk download) and data loading speed (Server Component fetch), using `loading.tsx` to show a skeleton immediately on navigation, and investigating the Server Component data fetch with server-side logs.""",
-
-"""**Debug Scenario:**
-A Next.js App Router Server Action mutates the database but the page doesn't reflect the change after redirect:
-
-```ts
-'use server';
-async function createComment(formData: FormData) {
-  await db.comments.create({ data: { content: formData.get('content'), postId } });
-  redirect('/posts/' + postId); // Redirects, but page shows stale data!
-}
-```
-
-`redirect()` navigates to the route, but the Router Cache holds the previous version of that page. Without revalidation, the cache is served. Show: calling `revalidatePath('/posts/' + postId)` BEFORE `redirect()`, using `revalidateTag('comments')` for tagged invalidation, and `redirect()` throwing a special `NEXT_REDIRECT` error (should not be inside `try/catch`).""",
-
-"""**Debug Scenario:**
-A Next.js `_app.tsx` wrapping components with a custom layout loses its layout on page transitions because `Component` changes:
-
-```tsx
-// pages/_app.tsx
-export default function App({ Component, pageProps }) {
-  return (
-    <Layout>  {/* re-mounts on every page change! */}
-      <Component {...pageProps} />
-    </Layout>
+  return new ImageResponse(
+    <div style={{ display: 'flex', width: '100%', height: '100%', background: '#1e1b4b', padding: 60 }}>
+      <h1 style={{ color: '#fff', fontSize: 72, fontFamily: 'Inter' }}>{post.title}</h1>
+    </div>,
+    { ...size, fonts: [{ name: 'Inter', data: font, weight: 700 }] }
   );
 }
 ```
 
-`<Layout>` itself doesn't re-mount (same JSX) but any state inside `<Layout>` (like scroll position or sidebar open state) resets because React reconciles by position — actually the Layout doesn't re-mount if it has a stable identity. The real bug: sidebar state in `Layout` uses `useState` keyed to `Component`. Show: lifting sidebar state above `_app.tsx` using Zustand / Jotai for persistent layout state, and the App Router `layout.tsx` which truly persists layout state across navigations.""",
+Show: the file-based metadata convention (`opengraph-image.tsx` auto-generates the og:image meta tag), `ImageResponse` using Satori under the hood (renders JSX to SVG/PNG), custom font loading, and `generateMetadata` for dynamic meta tags.''',
 
-"""**Debug Scenario:**
-A Next.js app using `next/font` in a CSS Module has the font class correctly applied but the font still doesn't change:
-
-```ts
-// app/layout.tsx
-import { Inter } from 'next/font/google';
-const inter = Inter({ subsets: ['latin'] });
-
-<html className={inter.className}>
-```
-
-The font loads, but another global CSS rule `* { font-family: Arial !important }` overrides it with `!important`. Show: removing the `!important` override, using CSS custom properties as the font variable (`inter.variable`), and the `variable` vs `className` usage (`className` directly applies, `variable` exposes a CSS custom property `--font-inter` for use in CSS files).""",
-
-"""**Debug Scenario:**
-A Next.js App Router component that reads `searchParams` on a Server Component is making the entire page dynamic and slower than expected:
+'''**Task (Code Generation):**
+Build a Next.js search page with URL state syncing using `useSearchParams` and `useRouter`:
 
 ```tsx
-// app/products/page.tsx
-export default function Page({ searchParams }: { searchParams: { sort?: string } }) {
-  const sort = searchParams.sort ?? 'asc'; // reading searchParams = dynamic!
-  // ...
+'use client';
+import { useSearchParams, useRouter, usePathname } from 'next/navigation';
+
+export function SearchFilters() {
+  const searchParams = useSearchParams();
+  const pathname = usePathname();
+  const router = useRouter();
+
+  const updateFilter = (key: string, value: string) => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (value) params.set(key, value);
+    else params.delete(key);
+    router.push(`${pathname}?${params.toString()}`, { scroll: false });
+  };
+
+  return (
+    <>
+      <input
+        defaultValue={searchParams.get('q') ?? ''}
+        onChange={e => updateFilter('q', e.target.value)}
+        placeholder="Search..."
+      />
+      <select
+        defaultValue={searchParams.get('sort') ?? 'newest'}
+        onChange={e => updateFilter('sort', e.target.value)}
+      >
+        <option value="newest">Newest</option>
+        <option value="price-asc">Price ↑</option>
+      </select>
+    </>
+  );
 }
 ```
 
-Accessing `searchParams` in a Server Component opts the entire page out of static rendering (it becomes dynamic on every request). Show: using `Suspense` to isolate the dynamic portion, wrapping only the sort-dependent component in Suspense with its own `searchParams` read, `generateStaticParams` for static paths with a dynamic shell, and `use(searchParams)` in React 19 for deferred reads.""",
+Show: the `URLSearchParams` building, `router.push` vs `router.replace` for browser history (replace for filter changes — no back-button spam), debouncing the search input update, and the Server Component reading parameters via `searchParams` prop.''',
 
-"""**Debug Scenario:**
-A Next.js App Router app running on Vercel shows high costs because every user request is a new Serverless Function invocation even for cached pages:
+'''**Task (Code Generation):**
+Implement a Next.js App Router global error boundary with Sentry integration:
+
+```tsx
+// app/global-error.tsx:
+'use client';
+import * as Sentry from '@sentry/nextjs';
+import { useEffect } from 'react';
+
+export default function GlobalError({ error, reset }: { error: Error; reset: () => void }) {
+  useEffect(() => {
+    Sentry.captureException(error, {
+      tags: { source: 'global-error-boundary' },
+      extra: { url: window.location.href },
+    });
+  }, [error]);
+
+  return (
+    <html><body>
+      <h1>Something went wrong</h1>
+      <button onClick={reset}>Try again</button>
+    </body></html>
+  );
+}
+
+// Sentry Next.js config (next.config.js):
+const { withSentryConfig } = require('@sentry/nextjs');
+module.exports = withSentryConfig(nextConfig, { silent: true, org: 'my-org', project: 'my-project' });
+```
+
+Show: `global-error.tsx` replacing the entire page (including layout) on error, `error.tsx` for route-specific errors (without replacing layout), Sentry's Next.js SDK — `instrumentation.ts` for Node.js + Edge initialization, and `sentry.client.config.ts`.''',
+
+'''**Task (Code Generation):**
+Build a Next.js i18n setup using the App Router with dictionary-based translations:
+
+```
+app/
+  [locale]/
+    layout.tsx
+    page.tsx
+    about/page.tsx
+middleware.ts           ← Locale detection and redirect
+dictionaries/
+  en.json
+  fr.json
+  es.json
+```
 
 ```ts
-export const revalidate = 3600; // should cache for 1 hour
-export default async function ProductPage({ params }) {
-  const product = await fetchProduct(params.id);
-  return <Product {...product} />;
+// middleware.ts — detect and redirect to locale:
+import Negotiator from 'negotiator';
+import { match } from '@formatjs/intl-localematcher';
+
+export function middleware(req: NextRequest) {
+  const locale = getLocale(req);
+  if (!req.nextUrl.pathname.startsWith(`/${locale}`)) {
+    return NextResponse.redirect(new URL(`/${locale}${req.nextUrl.pathname}`, req.url));
+  }
+}
+
+// getDictionary.ts:
+const dictionaries = { en: () => import('./dictionaries/en.json'), fr: () => import('./dictionaries/fr.json') };
+export const getDictionary = async (locale: string) => (await dictionaries[locale]?.())?.default ?? {};
+```
+
+Show: the `[locale]` dynamic segment, `generateStaticParams` for known locales, `Intl.Collator` for locale-aware sorting, and `next-intl` library as a simpler alternative.''',
+
+'''**Task (Code Generation):**
+Implement a Next.js App Router protected layout with role-based access control:
+
+```tsx
+// app/(dashboard)/layout.tsx — Protected layout:
+import { getSession } from '@/lib/session';
+import { redirect } from 'next/navigation';
+
+export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
+  const session = await getSession();
+
+  if (!session?.userId) redirect('/login');
+
+  const user = await db.user.findUnique({
+    where: { id: session.userId },
+    select: { id: true, name: true, role: true, permissions: true },
+  });
+
+  if (!user) redirect('/login');
+
+  return (
+    <RBACProvider user={user}>
+      <DashboardShell user={user}>
+        {children}
+      </DashboardShell>
+    </RBACProvider>
+  );
+}
+
+// In any child route page:
+// app/(dashboard)/admin/page.tsx:
+export default async function AdminPage() {
+  const user = await getCurrentUser();         // Uses cache() — no extra DB call
+  if (user.role !== 'admin') notFound();
+  return <AdminPanel />;
 }
 ```
 
-`revalidate` tells Next.js to ISR-cache the page, but cache headers from `fetchProduct` include `Cache-Control: no-store` (probably from a dev-mode fetch), preventing Vercel's CDN from caching. Show: checking `Response` headers from the upstream API, overriding with `fetch(url, { next: { revalidate: 3600 } })`, using `unstable_cache` to cache the data regardless of upstream headers, and Vercel's Fluid Compute vs Functions cost model.""",
+Show: the `(dashboard)` route group (no URL segment), `cache()` from React for de-duplicating DB calls across the same request, and `RBACProvider` passing permissions to client components.''',
 
-"""**Debug Scenario:**
-A Next.js Pages Router app with `getStaticPaths` returns `fallback: true` but navigating to a new path shows a full-page loader for 3 seconds before rendering:
+'''**Task (Code Generation):**
+Build a Next.js API rate limiter using Upstash Redis:
+
+```ts
+// lib/rate-limit.ts:
+import { Ratelimit } from '@upstash/ratelimit';
+import { Redis } from '@upstash/redis';
+
+const ratelimit = new Ratelimit({
+  redis: Redis.fromEnv(),
+  limiter: Ratelimit.slidingWindow(10, '10 s'),  // 10 requests per 10 seconds
+  analytics: true,
+  prefix: 'api-rate-limit',
+});
+
+// app/api/protected/route.ts:
+export async function GET(req: Request) {
+  const ip = req.headers.get('x-forwarded-for') ?? '127.0.0.1';
+  const { success, limit, remaining, reset } = await ratelimit.limit(ip);
+
+  if (!success) {
+    return Response.json(
+      { error: 'Rate limit exceeded' },
+      { status: 429, headers: { 'Retry-After': String(Math.ceil((reset - Date.now()) / 1000)) } }
+    );
+  }
+
+  return Response.json({ data: 'OK', rateLimit: { limit, remaining } });
+}
+```
+
+Show: Upstash Redis HTTP client (edge-compatible, no TCP), sliding window vs fixed window vs token bucket algorithms, the `Retry-After` header convention, and applying the rate limiter via middleware for global protection.''',
+
+'''**Task (Code Generation):**
+Implement a Next.js `prefetch` strategy for faster navigation using `router.prefetch`:
+
+```tsx
+'use client';
+export function ProductGrid({ products }: { products: Product[] }) {
+  const router = useRouter();
+
+  return products.map(product => (
+    <article
+      key={product.id}
+      onPointerEnter={() => router.prefetch(`/products/${product.slug}`)}
+    >
+      <Link
+        href={`/products/${product.slug}`}
+        prefetch={false}  // Disable auto-prefetch (too many in a large grid)
+      >
+        {product.name}
+      </Link>
+    </article>
+  ));
+}
+```
+
+Show: `router.prefetch('/path')` for imperative hover-intent prefetching, `<Link prefetch={false}>` to disable automatic prefetching for performance (many links), the App Router's automatic prefetch of linked layouts (but not leaf page data), and `<Link prefetch={true}>` to eagerly prefetch even when not in viewport.''',
+
+'''**Task (Code Generation):**
+Build a Next.js A/B testing setup using Edge Middleware with sticky assignment:
+
+```ts
+// middleware.ts:
+export function middleware(req: NextRequest) {
+  const variant = req.cookies.get('ab-checkout')?.value ??
+    (Math.random() < 0.5 ? 'control' : 'treatment');
+
+  const res = NextResponse.rewrite(
+    new URL(`/experiments/checkout-${variant}${req.nextUrl.pathname}`, req.url)
+  );
+
+  // Sticky assignment — same variant for the session:
+  if (!req.cookies.has('ab-checkout')) {
+    res.cookies.set('ab-checkout', variant, { maxAge: 60 * 60 * 24 * 30 });
+  }
+
+  // Pass variant to pages via header:
+  res.headers.set('x-ab-variant', variant);
+
+  return res;
+}
+```
+
+Show: the cookie-based sticky assignment, consistent user bucketing (hash user ID instead of random for logged-in users), `x-ab-variant` header forwarding to analytics, and reading the variant in the page component (`headers().get('x-ab-variant')`).''',
+
+'''**Task (Code Generation):**
+Implement Next.js Draft Mode for CMS preview with a secure token:
+
+```ts
+// app/api/draft/route.ts — Enable draft mode:
+export async function GET(req: Request) {
+  const url = new URL(req.url);
+  const token = url.searchParams.get('token');
+  const slug  = url.searchParams.get('slug');
+
+  if (token !== process.env.DRAFT_SECRET) {
+    return Response.json({ error: 'Invalid token' }, { status: 401 });
+  }
+
+  const { enableDraftMode } = await import('next/headers');
+  enableDraftMode();
+
+  return Response.redirect(new URL(`/blog/${slug}`, req.url));
+}
+
+// In page.tsx:
+import { draftMode } from 'next/headers';
+
+export default async function BlogPost({ params }) {
+  const { isEnabled } = draftMode();
+  const post = await cms.getPost(params.slug, { draft: isEnabled });
+  return <Article post={post} isDraft={isEnabled} />;
+}
+```
+
+Show: `draftMode()` from `next/headers`, the secure token validation, disabling draft mode via `/api/disable-draft`, and configuring the CMS webhook to call the preview URL.''',
+
+'''**Task (Code Generation):**
+Build a Next.js sitemap generator using the file-based `sitemap.ts` convention:
+
+```ts
+// app/sitemap.ts:
+import { MetadataRoute } from 'next';
+
+export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
+  const [posts, products, categories] = await Promise.all([
+    db.post.findMany({ select: { slug: true, updatedAt: true }, where: { published: true } }),
+    db.product.findMany({ select: { slug: true, updatedAt: true } }),
+    db.category.findMany({ select: { slug: true } }),
+  ]);
+
+  return [
+    { url: 'https://example.com', lastModified: new Date(), changeFrequency: 'daily', priority: 1 },
+    ...posts.map(p => ({ url: `https://example.com/blog/${p.slug}`, lastModified: p.updatedAt, changeFrequency: 'weekly' as const, priority: 0.8 })),
+    ...products.map(p => ({ url: `https://example.com/products/${p.slug}`, lastModified: p.updatedAt, changeFrequency: 'daily' as const, priority: 0.9 })),
+  ];
+}
+```
+
+Show: Next.js 13.3+ file-based sitemap, returning the `MetadataRoute.Sitemap` type, the `changeFrequency` and `priority` fields, segmenting large sitemaps (split into `sitemap/[id]/route.ts`), and `robots.ts` companion file.''',
+
+'''**Task (Code Generation):**
+Implement a Next.js data mutation pattern using the `useFormState` (React 19 `useActionState`) hook:
+
+```tsx
+'use client';
+import { useActionState } from 'react'; // React 19; or useFormState from react-dom in 18
+import { createPost, FormState } from './actions';
+
+const initialState: FormState = { errors: {}, message: null };
+
+export function CreatePostForm() {
+  const [state, formAction, isPending] = useActionState(createPost, initialState);
+
+  return (
+    <form action={formAction}>
+      <input name="title" aria-describedby="title-error" />
+      {state.errors?.title && <span id="title-error">{state.errors.title[0]}</span>}
+
+      <textarea name="content" />
+      {state.errors?.content && <span>{state.errors.content[0]}</span>}
+
+      <button type="submit" disabled={isPending}>
+        {isPending ? 'Creating...' : 'Create Post'}
+      </button>
+      {state.message && <p role="alert">{state.message}</p>}
+    </form>
+  );
+}
+```
+
+Show: the Server Action returning `FormState`, Zod validation inside the action, `isPending` from `useActionState` for loading UI, and progressive enhancement (form submits without JS via standard form POST).''',
+
+'''**Debug Scenario:**
+A Next.js App Router page throws "Dynamic server usage: `headers` was called" during `next build`:
+
+```tsx
+// app/user/page.tsx:
+import { headers } from 'next/headers';
+
+export default async function UserPage() {
+  const userAgent = headers().get('user-agent'); // Error at build time!
+  return <div>UA: {userAgent}</div>;
+}
+```
+
+App Router tries to statically render all pages at build time unless told otherwise. `headers()` is dynamic — can't be known at build time. Show: adding `export const dynamic = 'force-dynamic'` to the page, or `export const revalidate = 0` (implies dynamic), and why `cookies()`, `headers()`, and `searchParams` all trigger dynamic rendering.''',
+
+'''**Debug Scenario:**
+A Next.js middleware `NextResponse.rewrite()` causes infinite redirect loops:
+
+```ts
+// middleware.ts:
+export function middleware(req: NextRequest) {
+  if (req.nextUrl.pathname === '/') {
+    return NextResponse.rewrite(new URL('/home', req.url)); // Rewrites / to /home
+  }
+  if (req.nextUrl.pathname === '/home') {
+    return NextResponse.rewrite(new URL('/', req.url)); // Rewrites /home back to /! Loop!
+  }
+}
+```
+
+The middleware matches `/home` and rewrites back to `/`, which matches again and rewrites to `/home` — infinite loop. Show: using a guard condition to detect rewritten requests (`req.headers.get('x-middleware-subrequest')`), checking `req.nextUrl.pathname` before rewriting, and using `NextResponse.next()` as the default case to avoid accidental catch-all behavior.''',
+
+'''**Debug Scenario:**
+A Next.js Server Component throws "Error: async/await is not yet supported in Client Components":
+
+```tsx
+// app/page.tsx (default — Server Component):
+async function Page() {
+  const data = await getData(); // ✓ Allowed in Server Components
+  return <ClientComponent data={data} />;
+}
+
+// Somewhere in the component tree:
+'use client';
+async function AsyncClientComponent() {
+  const data = await fetch('/api'); // Error! Client Components cannot be async
+}
+```
+
+`async` Client Components are not supported — the `async` function can't be used as a React component with `'use client'`. Show: removing `async` and using `useEffect` + state for data fetching in Client Components, or moving the async work to a Server Component that passes data as props, or React Query's `useQuery` hook.''',
+
+'''**Debug Scenario:**
+A Next.js image with a remote src fails in production with "Invalid src prop — hostname not configured":
+
+```tsx
+<Image src="https://images.contentful.com/abc/photo.jpg" alt="..." width={800} height={600} />
+// Error: hostname "images.contentful.com" is not configured under images in next.config.js
+```
+
+`next/image` requires all remote hostnames to be allowlisted for security. Show:
+
+```js
+// next.config.js:
+images: {
+  remotePatterns: [
+    { protocol: 'https', hostname: 'images.contentful.com', port: '', pathname: '/**' },
+  ],
+}
+```
+
+The difference between `domains` (deprecated, less specific) vs `remotePatterns` (precise wildcard matching), and why this allowlist exists (prevents SSRF attacks via Next.js image optimization endpoint).''',
+
+'''**Debug Scenario:**
+A Next.js App Router Client Component using `useState` causes hydration mismatch because it reads `localStorage` during initial render:
+
+```tsx
+'use client';
+function ThemeToggle() {
+  const [theme, setTheme] = useState(localStorage.getItem('theme') ?? 'light');
+  // Server: no localStorage → throws ReferenceError
+  // OR: server renders 'light', client reads 'dark' from storage → mismatch
+}
+```
+
+`localStorage` is unavailable in SSR, and even if guarded, the server value may differ from the client. Show: using `useState('light')` as default (always matches server), then updating from `localStorage` in a `useEffect` after hydration, `suppressHydrationWarning` on the element for intentional mismatches, and Next.js's `dynamic(() => import('./ThemeToggle'), { ssr: false })` to skip SSR entirely for this component.''',
+
+'''**Debug Scenario:**
+A Next.js 14 App Router `fetch()` inside a Server Component is not being cached despite using `force-cache`:
+
+```tsx
+async function ProductPage() {
+  const product = await fetch(`/api/products/${id}`, {
+    cache: 'force-cache',
+  });
+  // Product is fetched fresh every request — cache not working!
+}
+```
+
+Relative URLs in `fetch()` inside Server Components cause issues — the request goes to `http://localhost:3000/api/products/id` in development, and the relative URL resolution may differ in production (especially on Vercel). Show: using an absolute URL (`${process.env.NEXT_PUBLIC_API_URL}/api/products/${id}`), or better — calling the database/service directly (no HTTP roundtrip needed inside RSC), and Next.js's `cache` function for de-duplicating work within a single request.''',
+
+'''**Debug Scenario:**
+A Next.js App Router `loading.tsx` file doesn't show while the page's data is loading:
+
+```
+app/
+  products/
+    loading.tsx  ← Exists but never shows!
+    page.tsx
+```
+
+```tsx
+// page.tsx — NOT using async/await:
+'use client';
+function ProductsPage() {
+  const [products, setProducts] = useState([]);
+  useEffect(() => { fetch('/api/products').then(r => r.json()).then(setProducts); }, []);
+  // Page renders immediately (empty), then data loads client-side
+  // loading.tsx only works for SERVER component route suspense, not client-side fetching!
+}
+```
+
+`loading.tsx` wraps the page in a `<Suspense>` boundary — this only activates for async Server Components. Client-side `useEffect` data fetching bypasses it. Show: converting to an async Server Component + `Suspense` (activates `loading.tsx`), or showing a skeleton in the Client Component while the data loads (`if (products.length === 0) return <Skeleton />`).''',
+
+'''**Debug Scenario:**
+A Next.js Edge middleware reads from a Prisma database but throws build errors:
+
+```ts
+// middleware.ts:
+import { db } from '@/lib/db'; // Imports Prisma client!
+
+export const config = { matcher: ['/dashboard/:path*'] };
+
+export async function middleware(req: NextRequest) {
+  const session = await db.session.findUnique(...); // Error: Prisma not supported in Edge Runtime
+}
+```
+
+Prisma uses Node.js APIs not available in the Edge Runtime (no `fs`, no TCP sockets for database connections). Show: using Prisma's Accelerate edge adapter, lightweight alternatives (Upstash Redis, `@vercel/kv`, or a JWT from a signed cookie), and keeping the middleware lightweight — defer database calls to API routes or Server Components.''',
+
+'''**Debug Scenario:**
+A developer's Next.js API route returns a 405 Method Not Allowed when testing with a REST client:
+
+```ts
+// app/api/users/route.ts:
+export async function GET(req: Request) {
+  return Response.json(await db.user.findMany());
+}
+
+// Testing: POST /api/users → 405 Method Not Allowed
+```
+
+The `app/api/users/route.ts` only exports `GET`. For `POST /api/users`, a `POST` export is needed. Show: adding `export async function POST(req: Request) { ... }`, the App Router Route Handler convention (named exports: `GET`, `POST`, `PUT`, `PATCH`, `DELETE`, `HEAD`, `OPTIONS`), and the `OPTIONS` handler for CORS preflight.''',
+
+'''**Debug Scenario:**
+A Next.js page using `getStaticPaths` with `fallback: 'blocking'` shows the wrong content for low-traffic pages:
 
 ```ts
 export async function getStaticPaths() {
-  return { paths: [], fallback: true }; // no paths pre-generated
+  const topProducts = await db.product.findMany({ take: 100, orderBy: { views: 'desc' } });
+  return { paths: topProducts.map(p => ({ params: { slug: p.slug } })), fallback: 'blocking' };
 }
 ```
 
-With `fallback: true`, the first request to an ungenerated path shows the fallback UI (spinner) while the page generates. Show: using `fallback: 'blocking'` to server-side render new paths before sending HTML (no spinner, but 3s delay is still there), on-demand ISR with `res.revalidate()` to pre-generate popular paths when content is published, and the Pages Router vs App Router ISR behavior comparison.""",
+With `fallback: 'blocking'`, unbuilt pages are SSR'd on first request, then cached as static. This is correct. The actual bug: the first visitor to an unbuilt page triggers SSR, but if `getStaticProps` throws, the error page is statically cached and subsequent visitors see the error. Show: proper try/catch in `getStaticProps` with `notFound: true` for missing products, `revalidate` to eventually re-try failed pages, and `fallback: 'blocking'` vs App Router's `dynamicParams = true` equivalent.''',
 
-"""**Debug Scenario:**
-A Next.js API route that calls an external GraphQL API always returns a fresh response instead of using the cached data, even though `revalidate` is set:
+'''**Task (Code Generation):**
+Build a Next.js `instrumentation.ts` for OpenTelemetry tracing:
 
 ```ts
-// app/api/data/route.ts
-export const revalidate = 300;
+// instrumentation.ts (runs on server startup):
+export async function register() {
+  if (process.env.NEXT_RUNTIME === 'nodejs') {
+    const { NodeSDK } = await import('@opentelemetry/sdk-node');
+    const { getNodeAutoInstrumentations } = await import('@opentelemetry/auto-instrumentations-node');
+    const { OTLPTraceExporter } = await import('@opentelemetry/exporter-trace-otlp-http');
 
-export async function GET() {
-  const response = await fetch('https://graphql.example.com/api', {
-    method: 'POST',
-    body: JSON.stringify({ query: '{ products { id name } }' }),
-  });
-  return Response.json(await response.json());
-}
-```
+    const sdk = new NodeSDK({
+      traceExporter: new OTLPTraceExporter({ url: process.env.OTEL_EXPORTER_OTLP_ENDPOINT }),
+      instrumentations: [getNodeAutoInstrumentations({
+        '@opentelemetry/instrumentation-http': { enabled: true },
+        '@opentelemetry/instrumentation-fs': { enabled: false }, // Too noisy
+      })],
+    });
 
-Next.js only caches `GET` fetch requests. The GraphQL request is a `POST` — which Next.js never caches. Show: caching the GraphQL response using `unstable_cache` wrapped around the fetch call, or memoizing with `React.cache` for per-request deduplication, and the `init.cache` option on `fetch` (`{ cache: 'force-cache', next: { revalidate: 300 } }`) for cacheable GET requests.""",
-
-"""**Debug Scenario:**
-A Next.js App Router Client Component using `useRouter().push()` doesn't preserve scroll position when navigating back:
-
-```tsx
-'use client';
-function ProductCard({ product }) {
-  const router = useRouter();
-  return <div onClick={() => router.push(`/products/${product.id}`)}>...</div>;
-}
-```
-
-`router.push()` does NOT save/restore scroll position by default in App Router when navigating programmatically. Show: the `scroll: false` option in `router.push('/path', { scroll: false })`, implementing manual scroll restoration with `sessionStorage` (save `scrollY` before navigate, restore in `useLayoutEffect` on destination), and `<Link>` vs `router.push()` scroll behavior differences.""",
-
-"""**Debug Scenario:**
-A Next.js app is showing a CORS error when calling its own API routes from the browser, despite being on the same domain:
-
-```
-Access to fetch at 'https://app.example.com/api/data' 
-from origin 'https://app.example.com' has been blocked by CORS policy.
-```
-
-The app is actually not calling its own domain — the Vercel deployment is on `app.example.com` but the request goes to a slightly different URL (the preview URL `app-xyz.vercel.app`). The browser sees a cross-origin request. Show: always calling API routes as relative URLs (`/api/data` instead of `https://app.example.com/api/data`) in Client Components, the `next.config.js` CORS headers configuration for explicitly allowed origins, and `NextResponse` with `Access-Control-Allow-Origin` headers for external client access.""",
-
-"""**Debug Scenario:**
-A Next.js `middleware.ts` that sets cookies causes a loop — the middleware keeps redirecting because the cookie it just set isn't seen on the next check:
-
-```ts
-export function middleware(req: NextRequest) {
-  const hasCookie = req.cookies.get('initialized');
-  if (!hasCookie) {
-    const res = NextResponse.redirect(new URL('/welcome', req.url));
-    res.cookies.set('initialized', 'true');
-    return res; // Redirects to /welcome, then middleware runs AGAIN without the cookie!
+    sdk.start();
+    process.on('SIGTERM', () => sdk.shutdown());
   }
 }
 ```
 
-The `Set-Cookie` header is in the response, but the browser hasn't received it yet — the redirect sends the response and the next request from the browser starts fresh. But `/welcome` also hits the middleware — the cookie IS sent in the redirect response, so the browser SHOULD have it on the next request. The real bug: `matcher` doesn't exclude `/welcome`, causing infinite redirect. Show: adding `/welcome` to the matcher exclusion list, and using `NextResponse.next({ headers: { 'Set-Cookie': ... } })` to set cookies without redirecting.""",
+Show: the `instrumentation.ts` convention (Next.js 13.4+), `NEXT_RUNTIME` guard for Edge vs Node.js, `@vercel/otel` as a simpler Vercel-native alternative, and the `next.config.js` `experimental.instrumentationHook: true` flag.''',
 
-"""**Debug Scenario:**
-A Next.js App Router app has a `loading.tsx` file but the loading skeleton sometimes flickers and shows even for cached navigations that complete nearly instantly:
+'''**Task (Code Generation):**
+Implement a Next.js `cacheLife` and `cacheTag` pattern with the React `cache` function:
 
-```tsx
-// app/products/loading.tsx
-export default function Loading() {
-  return <ProductSkeleton />;  // flickers on fast cached navigations
-}
+```ts
+// lib/data.ts — Cached data fetchers with request deduplication:
+import { cache } from 'react';
+import { unstable_cache } from 'next/cache';
+
+// Request-level dedup (per request, not persisted):
+export const getCurrentUser = cache(async (userId: string) => {
+  return db.user.findUnique({ where: { id: userId } });
+});
+
+// Full data cache (persisted across requests, ISR-like):
+export const getProductsByCategory = unstable_cache(
+  async (category: string) => db.product.findMany({ where: { category } }),
+  ['products-by-category'],      // Cache key prefix
+  { tags: ['products'], revalidate: 3600 }
+);
+
+// Multiple RSCs calling getCurrentUser(userId) in the same request →
+// only ONE database query (React cache deduplicates).
 ```
 
-`loading.tsx` shows the skeleton on the INSTANT the navigation starts (before the destination page is ready). For cached pages that resolve in 50ms, the skeleton flickers briefly. Show: using `startTransition` to defer navigating (React waits up to the `transition` timeout before showing the fallback), the `useDeferredValue` pattern for hiding loading states under a threshold, and the recommendation to use skeleton screens that match the destination layout to reduce perceived flicker.""",
+Show: `cache()` for request-scoping (like React Query per-render dedup), `unstable_cache` for cross-request caching (like ISR for data), tag-based invalidation with `revalidateTag('products')`, and when to use each.''',
 
 ]

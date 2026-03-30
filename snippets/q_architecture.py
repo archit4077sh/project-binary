@@ -1,652 +1,596 @@
 """
-snippets/q_architecture.py — BATCH 6: 55 brand-new Architecture questions
-Zero overlap with batches 1-5 archives.
+snippets/q_architecture.py — BATCH 7: 55 brand-new Architecture questions
+Zero overlap with batches 1-6 archives.
 """
 
 Q_ARCHITECTURE = [
 
-"""**Task (Code Generation):**
-Implement a `createEventSourcingStore<State, Event>` for event-sourced state management:
+'''**Task (Code Generation):**
+Implement a `createOutboxPattern` for reliable message publishing with at-least-once delivery:
 
 ```ts
-const store = createEventSourcingStore<CartState, CartEvent>({
-  initialState: { items: [], total: 0 },
-  reducer: (state, event) => {
-    switch (event.type) {
-      case 'ITEM_ADDED': return addItem(state, event.item);
-      case 'ITEM_REMOVED': return removeItem(state, event.itemId);
+// Write the order AND the outbox message in one transaction — no dual-write problem:
+await db.transaction(async (txn) => {
+  const order = await txn.orders.create({ data: orderData });
+  await txn.outbox.create({
+    data: {
+      aggregateId: order.id,
+      aggregateType: 'Order',
+      eventType: 'OrderCreated',
+      payload: JSON.stringify(order),
+      status: 'PENDING',
     }
-  },
-  persist: {
-    adapter: new PostgresEventAdapter(db),
-    snapshotEvery: 100,   // snapshot after 100 events to avoid replay from start
-  },
+  });
+  return order;
 });
 
-store.dispatch({ type: 'ITEM_ADDED', item: product });
-const currentState = store.getState();
-const history = await store.replayFrom(timestamp);
-```
-
-Show: the event log append-only pattern, snapshot creation and restoration, replaying events from a snapshot, and event versioning (migrating old event shapes).""",
-
-"""**Task (Code Generation):**
-Build a `createCircuitBreaker<T>` for resilient external service calls:
-
-```ts
-const externalAPI = createCircuitBreaker({
-  call: (url: string) => fetch(url).then(r => r.json()),
-  failureThreshold: 5,      // open after 5 failures
-  recoveryTimeout: 30_000,  // try again after 30s (half-open)
-  successThreshold: 2,      // close after 2 consecutive successes
-  onStateChange: (from, to) => metrics.record('circuit_state', { from, to }),
-});
-
-const data = await externalAPI.execute('/api/products');
-// If circuit is OPEN: throws CircuitOpenError immediately (no network call)
-// If circuit is HALF_OPEN: makes one test call
-// If circuit is CLOSED: makes the call normally
-```
-
-Show: the three states (CLOSED/OPEN/HALF_OPEN), the state machine transitions, `CircuitOpenError` fast-fail, and a `getStatus()` method for health checks.""",
-
-"""**Task (Code Generation):**
-Implement a `createCQRS` (Command Query Responsibility Segregation) pattern for a feature:
-
-```ts
-// Command side (writes):
-const commandBus = createCommandBus({
-  handlers: {
-    CreateOrder:   createOrderHandler(orderRepo, inventoryService),
-    CancelOrder:   cancelOrderHandler(orderRepo, emailService),
-    ShipOrder:     shipOrderHandler(orderRepo, shippingAPI),
-  },
-  middlewares: [authMiddleware, validationMiddleware, loggingMiddleware],
-});
-
-// Query side (reads — optimized for reading, separate data model):
-const queryBus = createQueryBus({
-  handlers: {
-    GetOrderById:   getOrderByIdHandler(readDb),
-    ListUserOrders: listUserOrdersHandler(readDb, cache),
-  },
-});
-
-await commandBus.dispatch({ type: 'CreateOrder', userId, items });
-const order = await queryBus.query({ type: 'GetOrderById', orderId });
-```
-
-Show: the command/query type separation (commands mutate, queries read), middleware pipeline for commands, and how to sync the read model from command side events.""",
-
-"""**Task (Code Generation):**
-Build a `createPluginSystem<PluginAPI>` framework for extensible applications:
-
-```ts
-const pluginAPI = createPluginSystem<PluginAPI>({
-  hooks: ['beforeRender', 'afterSave', 'onError'],
-  api: { db, cache, logger },
-});
-
-// Third-party plugins:
-pluginAPI.register({
-  name: 'analytics-plugin',
-  version: '1.0.0',
-  onMount: (api) => {
-    api.hooks.afterSave.tap('analytics', (event) => {
-      api.db.analytics.record(event);
-    });
-  },
-});
-
-// Core:
-await pluginAPI.hooks.afterSave.call({ entityType: 'product', id: productId });
-```
-
-Show: the tapable hook system (like webpack's), plugin lifecycle (`onMount`, `onUnmount`), dependency resolution between plugins (plugin A requires plugin B), version compatibility checking, and isolating plugin errors (one failing plugin doesn't crash the app).""",
-
-"""**Task (Code Generation):**
-Implement a `createMicroFrontendOrchestrator` for module federation:
-
-```ts
-const orchestrator = createMicroFrontendOrchestrator({
-  remotes: {
-    checkout: { url: 'https://checkout.internal/remoteEntry.js', scope: 'checkout' },
-    catalog:  { url: 'https://catalog.internal/remoteEntry.js',  scope: 'catalog' },
-    profile:  { url: 'https://profile.internal/remoteEntry.js',  scope: 'profile' },
-  },
-  shared: {
-    react:        { singleton: true, requiredVersion: '^18.0.0' },
-    'react-dom':  { singleton: true, requiredVersion: '^18.0.0' },
-    'design-system': { singleton: true },
-  },
-  fallback: (remoteName) => import(`./fallbacks/${remoteName}`),
-});
-
-const CheckoutApp = await orchestrator.load('checkout', './App');
-```
-
-Show: the Webpack Module Federation config for each remote, dynamic remote loading (`__webpack_init_sharing__`, `__webpack_share_scopes__`), version negotiation for shared modules, fallback loading when a remote fails, and cross-remote communication via a shared event bus.""",
-
-"""**Task (Code Generation):**
-Build a `createSagaOrchestrator` for long-running distributed transactions:
-
-```ts
-const checkoutSaga = createSaga('checkout', {
-  steps: [
-    { name: 'reserveInventory',  action: inventoryService.reserve,  compensate: inventoryService.release },
-    { name: 'chargePayment',     action: paymentService.charge,     compensate: paymentService.refund },
-    { name: 'createShipment',    action: shippingService.create,    compensate: shippingService.cancel },
-    { name: 'sendConfirmation',  action: emailService.sendConfirm,  compensate: null }, // no compensation needed
-  ],
-  onComplete: (ctx) => db.orders.update(ctx.orderId, { status: 'confirmed' }),
-  onFail:     (ctx, failedStep, error) => db.orders.update(ctx.orderId, { status: 'failed', reason: error.message }),
-});
-
-await checkoutSaga.execute({ orderId, userId, items });
-```
-
-Show: the step-by-step execution with rollback on failure (reverse compensation for all completed steps), persisting saga state to survive crashes, idempotency keys per step (retry-safe), and the saga log in the database for audit trails.""",
-
-"""**Task (Code Generation):**
-Implement a `createRepositoryPattern<Entity>` with caching and query builder:
-
-```ts
-const UserRepo = createRepository<User>({
-  table: 'users',
+// Separate outbox relay process polls and publishes:
+const outboxRelay = createOutboxRelay({
   db,
-  cache: redis,
-  cacheTTL: 300,
-  cacheKey: (id) => `user:${id}`,
-});
-
-// Typed query builder:
-const admins = await UserRepo.findMany({
-  where: { role: 'admin', active: true },
-  orderBy: { createdAt: 'desc' },
-  take: 10,
-  include: { posts: true, permissions: true },
-});
-
-// Cache-first read:
-const user = await UserRepo.findById('u1'); // checks cache first, falls through to DB
-await UserRepo.invalidate('u1');            // clears cache entry
-```
-
-Show: the cache-aside pattern (read-through + write-through), the typed `where` clause using `Partial<Entity>` or Prisma-style filters, and `UserRepo.findMany` with pagination.""",
-
-"""**Task (Code Generation):**
-Build a `createFeatureToggle` system with percentage rollout and user targeting:
-
-```ts
-const flags = createFeatureToggle({
-  source: {
-    type: 'remote',
-    url: 'https://flags.example.com/api',
-    pollInterval: 60_000,
-  },
-  defaults: {
-    newCheckoutFlow:   { enabled: false },
-    aiRecommendations: { enabled: false, rolloutPercentage: 10 },
-    darkMode:          { enabled: true },
-  },
-});
-
-const user = { id: 'u1', plan: 'pro', country: 'US' };
-
-flags.isEnabled('aiRecommendations', user);
-// true for 10% of users, consistent hashing by user.id
-
-flags.isEnabled('newCheckoutFlow', user);
-// false (disabled globally)
-```
-
-Show: consistent user bucketing using `hash(flagName + userId) % 100 < rolloutPercentage`, targeting rules (`{ criteria: { plan: 'pro' } }` — enable for pro users), SSR support (flags resolved server-side and hydrated to client), and the `useFeatureFlag` React hook.""",
-
-"""**Task (Code Generation):**
-Implement a `createStreamProcessor<Input, Output>` for backpressure-aware stream processing:
-
-```ts
-const processor = createStreamProcessor<LogEntry, ProcessedLog>({
-  transform: (entry) => ({
-    ...entry,
-    level: entry.severity > 5 ? 'high' : 'normal',
-    parsed: parseLogMessage(entry.raw),
-  }),
+  messageQueue: rabbitMQ,
+  pollInterval: 1000,
   batchSize: 100,
-  flushInterval: 5000,         // flush every 5s even if batch not full
-  backpressure: {
-    highWaterMark: 1000,       // pause input when buffer > 1000
-    lowWaterMark: 200,         // resume input when buffer < 200
-  },
-  errorStrategy: 'skip',       // skip malformed entries
-  onFlush: (batch) => elasticsearchClient.bulk(batch),
+  onPublished: async (id) => db.outbox.update({ where: { id }, data: { status: 'PUBLISHED' } }),
 });
-
-const readable = getLogStream();
-readable.pipe(processor.writable);
-processor.readable.pipe(esWriter);
 ```
 
-Show: implementing as a Node.js `Transform` stream, `push(null)` when done, backpressure via `highWaterMark`, batching with `setTimeout` for time-based flushing, and `objectMode: true` for object streams.""",
+Show: the transactional outbox pattern (write message and business data in same DB transaction), the polling relay process, idempotent consumers (process by outbox ID), and the `Change Data Capture` (CDC) alternative using Debezium instead of polling.''',
 
-"""**Task (Code Generation):**
-Build a `createCDNPurgeStrategy` for intelligent cache invalidation across CDN nodes:
+'''**Task (Code Generation):**
+Build a `createAggregateRoot<State, Event>` for Domain-Driven Design event sourcing:
 
 ```ts
-const cdnPurge = createCDNPurgeStrategy({
-  provider: 'cloudflare',
-  zoneId:   process.env.CF_ZONE_ID!,
-  apiToken: process.env.CF_API_TOKEN!,
-  strategies: {
-    content: 'tag',   // purge by cache tag (most efficient)
-    pricing: 'path',  // purge specific URL patterns
-    images:  'prefix', // purge all /images/* URLs
+const OrderAggregate = createAggregateRoot<OrderState, OrderEvent>({
+  initialState: { id: '', status: 'draft', items: [], total: 0 },
+  handlers: {
+    OrderCreated:  (state, event) => ({ ...state, id: event.orderId, status: 'pending' }),
+    ItemAdded:     (state, event) => ({ ...state, items: [...state.items, event.item] }),
+    OrderConfirmed:(state, event) => ({ ...state, status: 'confirmed', confirmedAt: event.at }),
+    OrderCancelled:(state, event) => ({ ...state, status: 'cancelled', reason: event.reason }),
   },
 });
 
-// After a content update:
-await cdnPurge.purge({ type: 'content', tags: ['product-123', 'category-electronics'] });
-await cdnPurge.purge({ type: 'pricing', path: '/api/prices/product-123' });
+const order = new OrderAggregate();
+order.apply({ type: 'OrderCreated', orderId: 'o1' });
+order.apply({ type: 'ItemAdded', item: { id: 'p1', price: 99 } });
+
+// Rebuild from event stream:
+const rebuilt = OrderAggregate.rehydrate(eventStream);
 ```
 
-Show: Cloudflare's Cache Tag purge API, surrogate key headers (`Cache-Tag: product-123`) set by the origin, bulk purge batching (Cloudflare: max 30 tags per request), and a circuit breaker around CDN API calls.""",
+Show: the `apply` method dispatching to the correct handler, `rehydrate` reducing over historical events, uncommitted events buffer for persistence, optimistic concurrency (`expectedVersion` for writes), and the aggregate version for conflict detection.''',
 
-"""**Task (Code Generation):**
-Implement a `createObservabilityMiddleware` for Express/Node.js with OpenTelemetry:
+'''**Task (Code Generation):**
+Implement a `createBulkheadPattern<T>` for isolating services using thread/concurrency pools:
 
 ```ts
-app.use(createObservabilityMiddleware({
-  serviceName: 'api-gateway',
-  tracing: {
-    exporter: new OTLPTraceExporter({ url: process.env.OTEL_EXPORTER_URL }),
-    autoInstrument: ['http', 'pg', 'redis'],
+const apiCallBulkhead = createBulkhead<UserData>({
+  maxConcurrent: 10,    // max 10 in-flight calls
+  maxQueue: 50,         // max 50 queued
+  timeout: 5000,        // 5s timeout per request
+  name: 'external-api',
+  onReject: (reason) => metrics.increment('bulkhead.rejection', { name: 'external-api', reason }),
+});
+
+// All calls to this external API go through the bulkhead:
+const user = await apiCallBulkhead.execute(() => externalAPI.getUser(userId));
+// If 10 are already in-flight and queue is full:
+// Throws BulkheadRejectionError immediately (fail-fast — don't make caller wait)
+```
+
+Show: using a semaphore (`Semaphore` class with `acquire/release`) for the concurrency limit, a priority queue for the waiting pool, timeout via `Promise.race([work, setTimeout(reject, timeout)])`, metrics for monitoring rejection rates, and combining with `createCircuitBreaker` for full resilience.''',
+
+'''**Task (Code Generation):**
+Build a `createSpecificationPattern<T>` for composable business rule validation:
+
+```ts
+const isPremiumUser    = new Specification<User>((user) => user.plan === 'premium');
+const isVerifiedEmail  = new Specification<User>((user) => user.emailVerified);
+const isAdultUser      = new Specification<User>((user) => user.age >= 18);
+const hasActiveAccount = new Specification<User>((user) => user.status === 'active');
+
+// Compose:
+const canAccessPremiumContent = isPremiumUser
+  .and(isVerifiedEmail)
+  .and(isAdultUser.or(hasActiveAccount))
+  .not(isBannedUser);
+
+// Use:
+if (!canAccessPremiumContent.isSatisfiedBy(currentUser)) {
+  throw new AccessDeniedError(canAccessPremiumContent.whyNotSatisfiedBy(currentUser));
+}
+```
+
+Show: the `Specification<T>` abstract class with `and`, `or`, `not` methods returning new composite specifications, `whyNotSatisfiedBy` returning the failing sub-specification names, and using specifications for filtering collections (`users.filter(spec.isSatisfiedBy.bind(spec))`).''',
+
+'''**Task (Code Generation):**
+Implement a `createReactiveGraph<N, E>` for building event-driven dependency graphs:
+
+```ts
+const graph = createReactiveGraph<ComputeNode, DataEdge>();
+
+const priceNode    = graph.addNode({ id: 'price',    compute: () => fetchPrice() });
+const taxNode      = graph.addNode({ id: 'tax',      compute: (inputs) => inputs.price * 0.2 });
+const discountNode = graph.addNode({ id: 'discount', compute: (inputs) => applyDiscounts(inputs.price) });
+const totalNode    = graph.addNode({ id: 'total',    compute: (inputs) => inputs.price + inputs.tax - inputs.discount });
+
+graph.addEdge(priceNode, taxNode,      { name: 'price' });
+graph.addEdge(priceNode, discountNode, { name: 'price' });
+graph.addEdge(taxNode,      totalNode, { name: 'tax' });
+graph.addEdge(discountNode, totalNode, { name: 'discount' });
+graph.addEdge(priceNode,    totalNode, { name: 'price' });
+
+// On price change: auto-propagates through the DAG:
+priceNode.invalidate();
+const total = await totalNode.getValue(); // Recomputes tax, discount, then total
+```
+
+Show: topological sort for evaluation order, memoized node values (only recompute on invalidation), change propagation using BFS/DFS from the invalidated node, and cycle detection.''',
+
+'''**Task (Code Generation):**
+Build a `createGraphQLDataLoader` for N+1 query elimination:
+
+```ts
+// Without DataLoader — N+1 queries in GraphQL:
+// Query 100 posts → 100 queries for each post's author
+
+// With DataLoader:
+const userLoader = new DataLoader<string, User>(async (userIds) => {
+  const users = await db.users.findMany({ where: { id: { in: [...userIds] } } });
+  return userIds.map(id => users.find(u => u.id === id) ?? new Error(`User ${id} not found`));
+}, { cache: true, maxBatchSize: 100 });
+
+// In resolvers:
+const resolvers = {
+  Post: {
+    author: (post, _, { loaders }) => loaders.user.load(post.authorId),
+    // 100 post resolvers all call load() → batched into ONE query!
   },
-  metrics: {
-    exporter: new PrometheusExporter({ port: 9464 }),
-    collect: ['http_requests_total', 'http_request_duration_seconds', 'active_connections'],
+};
+```
+
+Show: the DataLoader constructor requiring batched load function returning values in same order as IDs, `load()` vs `loadMany()`, per-request DataLoader instances (to avoid cross-request caching), and `clearAll()` for cache invalidation.''',
+
+'''**Task (Code Generation):**
+Implement a `createRateLimitedQueue` for throttling API calls to third-party services:
+
+```ts
+const stripeQueue = createRateLimitedQueue({
+  maxPerSecond: 25,           // Stripe: 25 RPS on free tier
+  maxPerMinute: 500,
+  burst: { max: 50, window: 1000 },   // Allow up to 50 requests in a burst window
+  priority: {
+    HIGH:   0,   // Process immediately
+    NORMAL: 100, // 100ms delay
+    LOW:    500, // 500ms delay
   },
-  logging: {
-    format: 'json',
-    includeTraceId: true,   // correlate logs with traces
+  onThrottle: (queued) => logger.warn('Stripe rate limit — queued', { queued }),
+});
+
+// Enqueue calls:
+const charge = await stripeQueue.enqueue(() => stripe.charges.create(chargeData), { priority: 'HIGH' });
+```
+
+Show: the token bucket algorithm for burst management, the priority queue sorted by deadline, measuring actual throughput with a sliding window counter, and `onThrottle` alerting when the queue depth exceeds a threshold.''',
+
+'''**Task (Code Generation):**
+Build a `createWebhookDeliveryEngine` for reliable webhook dispatch:
+
+```ts
+const webhookEngine = createWebhookDeliveryEngine({
+  storage: new PostgresWebhookStorage(db),
+  retry: {
+    maxAttempts: 7,
+    backoff: (attempt) => Math.min(Math.pow(2, attempt) * 1000, 3_600_000),
+    // 2s, 4s, 8s, 16s, 32s, 64s, 1h
   },
+  signature: {
+    algorithm: 'sha256',
+    headerName: 'X-Webhook-Signature',
+    secret: (endpointId) => getEndpointSecret(endpointId),
+  },
+  timeout: 30_000,
+  concurrency: 50,
+});
+
+await webhookEngine.dispatch({
+  endpointId: 'ep_1',
+  eventType: 'payment.completed',
+  payload: { orderId, amount, currency },
+});
+```
+
+Show: HMAC signature generation (`crypto.createHmac('sha256', secret).update(payload).digest('hex')`), the `attempts` table with status tracking, exponential backoff retry scheduling, marking endpoints as `DISABLED` after exhausting retries, and `svix` library as a managed alternative.''',
+
+'''**Task (Code Generation):**
+Implement a `createMultiRegionRouter` for latency-based request routing:
+
+```ts
+const router = createMultiRegionRouter({
+  regions: {
+    'us-east-1': { endpoint: 'https://api-us.example.com', latency: measureLatency('us-east-1') },
+    'eu-west-1': { endpoint: 'https://api-eu.example.com', latency: measureLatency('eu-west-1') },
+    'ap-south-1':{ endpoint: 'https://api-ap.example.com', latency: measureLatency('ap-south-1') },
+  },
+  strategy: 'lowest-latency',          // or 'round-robin', 'failover'
+  healthCheck: { interval: 30_000, path: '/health', threshold: 2 },
+  fallback: 'us-east-1',               // Use this region if all health checks fail
+  stickySession: {
+    enabled: true,
+    cookieName: 'preferred-region',
+    ttl: 60 * 60 * 24,
+  },
+});
+```
+
+Show: measuring region latency using `performance.now()` with a lightweight ping (HEAD /health), the health check failure counter and circuit-breaking unhealthy regions, sticky routing via cookie (once a user is routed to a region, keep them there), and Cloudflare's anycast routing as an alternative.''',
+
+'''**Task (Code Generation):**
+Build a `createSchemaMigration` framework for database schema versioning:
+
+```ts
+const migrationEngine = createSchemaMigration({
+  db,
+  migrationsDir: './migrations',
+  migrationsTable: 'schema_migrations',
+  checksumValidation: true,  // Detect if a previously-run migration file changed
+});
+
+// Migration file: 001_create_users.ts
+export const up = async (db: DatabaseClient) => {
+  await db.raw(`CREATE TABLE users (id UUID PRIMARY KEY, email TEXT UNIQUE NOT NULL, created_at TIMESTAMPTZ DEFAULT NOW())`);
+  await db.raw(`CREATE INDEX idx_users_email ON users (email)`);
+};
+
+export const down = async (db: DatabaseClient) => {
+  await db.raw(`DROP TABLE IF EXISTS users`);
+};
+
+// Run:
+await migrationEngine.up();      // Apply all pending migrations in order
+await migrationEngine.down(3);   // Roll back last 3 migrations
+await migrationEngine.status();  // List applied vs pending migrations
+```
+
+Show: the `schema_migrations` table tracking applied migrations, file ordering by timestamp prefix, the checksum comparison to detect tampering with applied migrations, and running migrations in a transaction with rollback on error.''',
+
+'''**Task (Code Generation):**
+Implement a `createApiVersioningStrategy` for managing breaking API changes:
+
+```ts
+// URL versioning: /api/v1/users, /api/v2/users
+app.use('/api/v1', v1Router);
+app.use('/api/v2', v2Router);
+
+// Header versioning: 'API-Version: 2024-01-01'
+const versionMiddleware = createVersionMiddleware({
+  header: 'API-Version',
+  supported: ['2023-01-01', '2023-07-01', '2024-01-01'],
+  default: '2023-01-01',
+  deprecated: ['2023-01-01'],  // Respond with Deprecation header
+  sunset: { '2023-01-01': new Date('2025-01-01') },  // Sunset: indicate end-of-life
+});
+
+// Type-safe version-aware handler:
+router.get('/users/:id', withVersion({
+  '2023-07-01': getUser_v2,
+  '2024-01-01': getUser_v3,
 }));
 ```
 
-Show: `opentelemetry-api` span creation and propagation, `@opentelemetry/auto-instrumentations-node` for automatic instrumentation, Prometheus metric types (Counter, Histogram, Gauge), correlating logs with trace ID, and health check endpoint `/metrics` for Prometheus scraping.""",
+Show: the `Deprecation: true` and `Sunset: <date>` response headers per RFC 8594, the version router pattern, version negotiation (find the earliest supported version ≥ requested), and `version-range` header for requesting a range of compatible versions.''',
 
-"""**Task (Code Generation):**
-Build a `createTestDoubles` factory for deterministic testing of external dependencies:
+'''**Task (Code Generation):**
+Build a `createCacheHierarchy<T>` with L1/L2/L3 caching layers:
 
 ```ts
-const doubles = createTestDoubles({
-  db: mockDatabase({
-    users: [{ id: 'u1', email: 'alice@test.com', role: 'admin' }],
-    posts: [],
-  }),
-  email: spyEmailService(),       // records calls, doesn't send
-  payment: stubPaymentService({   // always returns success
-    charge: () => ({ transactionId: 'txn_test_123', status: 'succeeded' }),
-  }),
-  time: frozenClock(new Date('2024-01-15T10:00:00Z')),
+const cache = createCacheHierarchy<Product>({
+  L1: { store: new Map(),            ttl: 60_000,       maxSize: 100  }, // In-process memory
+  L2: { store: new RedisStore(redis), ttl: 600_000,      maxSize: 10000 }, // Shared Redis
+  L3: { store: new CdnStore({ ... }), ttl: 3_600_000,    maxSize: null  }, // CDN edge cache
+  keyFn: (id: string) => `product:${id}`,
+  serialize:   JSON.stringify,
+  deserialize: (s) => JSON.parse(s) as Product,
+  onHit: (layer) => metrics.increment(`cache.hit.${layer}`),
+  onMiss:       () => metrics.increment('cache.miss'),
 });
 
-// Usage in tests:
-const result = await createOrder(doubles.db, doubles.payment, { userId: 'u1' });
-expect(doubles.email.calls).toHaveLength(1);
-expect(doubles.email.calls[0].to).toBe('alice@test.com');
+const product = await cache.get('p-1', async () => db.products.findById('p-1'));
+// Checks L1 → L2 → L3 → DB (writes to all layers on DB hit)
 ```
 
-Show: the `mockDatabase` implementing the repository interface in memory, `spyEmailService` recording calls in an array, `stubPaymentService` returning preset responses, and `frozenClock` overriding `Date.now()` and `setTimeout`.""",
+Show: the read-through logic (try L1, then L2, then L3, then source), write-through on miss (populate all layers on DB read), L1 eviction when at maxSize (LRU), and cache stampede protection (single-flight / promise coalescing).''',
 
-"""**Task (Code Generation):**
-Implement a `createSecretsManager` that fetches and caches secrets from AWS Secrets Manager:
-
-```ts
-const secrets = createSecretsManager({
-  region: 'us-east-1',
-  cacheTTL: 3600_000,         // re-fetch after 1 hour
-  refreshBefore: 300_000,     // refresh 5 minutes before expiry
-  onRefreshError: (err, key) => logger.error('Failed to refresh secret', { key, err }),
-});
-
-const dbPassword = await secrets.get('prod/database/password');
-const apiKey     = await secrets.get('prod/stripe/api-key');
-// Subsequent calls within TTL: cached, no AWS API call
-```
-
-Show: AWS SDK `GetSecretValueCommand`, caching with timestamps, proactive refresh before expiry using `setInterval`, error handling (return stale cached value on refresh failure), and TypeScript generics for structured secrets (`secrets.getJSON<DBConfig>('prod/database')`).""",
-
-"""**Task (Code Generation):**
-Build a `createAuditTrail` system that logs all data mutations with rollback capability:
+'''**Task (Code Generation):**
+Implement a `createEventDrivenWorkflow` for orchestrating complex business processes:
 
 ```ts
-const auditTrail = createAuditTrail({
-  storage: new PostgresAuditStorage(db),
-  captureFields: ['createdBy', 'updatedBy', 'timestamp'],
-  exclude: ['password', 'accessToken'],
-  retentionDays: 365,
-});
-
-// Wraps any entity repository:
-const auditedUserRepo = auditTrail.wrap(UserRepository);
-
-await auditedUserRepo.update('u1', { role: 'admin' });
-// Logs: { entityType:'user', entityId:'u1', action:'UPDATE', before:{role:'user'}, after:{role:'admin'}, actor:'admin@example.com', at: Date }
-
-// Rollback:
-await auditTrail.rollback({ entityType: 'user', entityId: 'u1', toTimestamp: oneDayAgo });
-```
-
-Show: the before/after snapshot storage (using PostgreSQL JSONB), field exclusion for sensitive data, the `rollback` function replaying inverse operations, and querying the audit log by entity or actor.""",
-
-"""**Task (Code Generation):**
-Implement a `createHealthCheck` endpoint with dependency checks and circuit integration:
-
-```ts
-const health = createHealthCheck({
-  checks: {
-    database: async () => {
-      await db.raw('SELECT 1');
-      return { status: 'up', latency: lastDbLatency };
-    },
-    redis: async () => {
-      const pong = await redis.ping();
-      return { status: pong === 'PONG' ? 'up' : 'down' };
-    },
-    externalAPI: circuitBreaker.getStatus, // uses circuit state
+const orderWorkflow = createEventDrivenWorkflow('order-fulfillment', {
+  events: {
+    'order.created':     [reserveInventory, createShipmentLabel],
+    'inventory.reserved':[chargeCustomer],
+    'payment.succeeded': [dispatchShipment, sendConfirmation],
+    'payment.failed':    [releaseInventory, notifyCustomer],
+    'shipment.delivered':[updateOrderStatus, requestReview],
   },
-  timeouts: { database: 2000, redis: 1000, externalAPI: 500 },
-  criticalChecks: ['database'],   // If database is down, overall status = down
-  degradedChecks: ['externalAPI'], // If externalAPI is down, overall status = degraded
+  compensations: {
+    'reserveInventory': releaseInventory,
+    'chargeCustomer':   refundCustomer,
+  },
+  deadLetterQueue: dlqPublisher,
+  traceId: (event) => event.correlationId,
 });
 
-app.get('/health', health.handler);
-// { status: 'up' | 'degraded' | 'down', checks: {...}, version: '1.2.3', uptime: 3600 }
+// Subscribe the workflow to events:
+eventBus.subscribe(orderWorkflow.handler);
 ```
 
-Show: parallel check execution with individual timeouts, overall status aggregation logic, the Kubernetes readiness vs liveness probes distinction, and caching health check results for 5 seconds to prevent health-check-induced load.""",
+Show: the event-handler mapping, each handler producing new events (chaining), compensation triggers on failure events, correlation IDs for tracing across handlers, dead letter queue for unhandled errors, and idempotency (event `id` dedup to avoid double processing).''',
+
+'''**Task (Code Generation):**
+Build a `createConsumerGroupManager` for Kafka consumer group coordination:
+
+```ts
+const consumerGroup = createConsumerGroupManager({
+  brokers: ['kafka-1:9092', 'kafka-2:9092'],
+  groupId: 'order-processor',
+  topics: ['orders', 'inventory', 'payments'],
+  fromBeginning: false,
+  sessionTimeout: 30_000,
+  heartbeatInterval: 3_000,
+  handlers: {
+    'orders':    orderHandler,
+    'inventory': inventoryHandler,
+    'payments':  paymentHandler,
+  },
+  concurrency: 5,       // 5 parallel message handlers per consumer instance
+  autoCommit: false,     // Manual commit after successful processing
+  onRebalance: () => flushLocalCaches(),
+});
+
+await consumerGroup.start();
+```
+
+Show: KafkaJS setup (`new Kafka({ brokers, clientId })`), `consumer.run({ eachMessage })` vs `eachBatch`, manual commit (`consumer.commitOffsets()`), graceful shutdown (drain in-flight messages, then `consumer.disconnect()`), and rebalance handling ("stop the world" vs cooperative/incremental rebalancing).''',
+
+'''**Task (Code Generation):**
+Implement a `createApiGateway` with routing, auth, and rate limiting:
+
+```ts
+const gateway = createApiGateway({
+  routes: [
+    { path: '/api/products',   upstream: 'product-service:3001',  auth: 'optional' },
+    { path: '/api/orders',     upstream: 'order-service:3002',     auth: 'required' },
+    { path: '/api/payments',   upstream: 'payment-service:3003',   auth: 'required', rateLimit: 'strict' },
+    { path: '/api/admin',      upstream: 'admin-service:3004',     auth: 'admin-only' },
+  ],
+  auth: {
+    verify: (token) => verifyJWT(token, process.env.JWT_SECRET),
+    extractUser: (payload) => ({ id: payload.sub, roles: payload.roles }),
+  },
+  rateLimits: {
+    default: { requests: 100, window: 60_000 },
+    strict:  { requests: 10,  window: 60_000 },
+  },
+  upstream: { timeout: 10_000, retries: 2, healthCheck: '/health' },
+});
+```
+
+Show: the reverse proxy using `http-proxy-middleware`, JWT verification in middleware, rate limiting with Redis sliding window, upstream health checks, and request/response transformation (stripping internal headers, adding correlation IDs).''',
+
+'''**Task (Code Generation):**
+Build a `createProcessManager` for coordinating multiple microservice processes:
+
+```ts
+const processManager = createProcessManager({
+  services: {
+    'api-server':  { command: 'node dist/api.js',     port: 3000, healthPath: '/health' },
+    'worker':      { command: 'node dist/worker.js',  replicas: 4 },
+    'scheduler':   { command: 'node dist/scheduler.js', singleton: true },
+    'metrics':     { command: 'node dist/metrics.js', port: 9464 },
+  },
+  startup: {
+    order: ['metrics', 'api-server', 'scheduler', 'worker'],
+    waitForHealth: true,
+    timeout: 30_000,
+  },
+  shutdown: {
+    order: ['worker', 'scheduler', 'api-server', 'metrics'],
+    gracefulTimeout: 10_000,
+  },
+  restartPolicy: { maxRestarts: 5, window: 60_000 },
+});
+```
+
+Show: `child_process.spawn` for each service, `SIGTERM` propagation on shutdown, health check polling during startup, crash detection with restart backoff, and `pm2` as a production alternative.''',
 
 # ── Debugging ─────────────────────────────────────────────────────────────────
 
-"""**Debug Scenario:**
-A microservices architecture has "thundering herd" problems — when a cache node restarts, all 100 services immediately query the database simultaneously, bringing it down:
+'''**Debug Scenario:**
+A microservice architecture shows "split brain" — two service instances both believe they are the "leader" and process the same job simultaneously:
 
 ```ts
-async function getData(key: string) {
-  const cached = await redis.get(key);
-  if (cached) return JSON.parse(cached);
-  // All 100 services hit DB simultaneously when cache is empty!
-  const data = await db.query('SELECT * FROM data WHERE key = $1', [key]);
-  await redis.set(key, JSON.stringify(data), 'EX', 3600);
-  return data;
+// Leader election using Redis SETNX:
+async function electLeader(instanceId: string) {
+  const acquired = await redis.set('leader', instanceId, 'NX', 'EX', 30);
+  return !!acquired;
 }
+// Instance A: acquires lock with 30s TTL
+// Instance B: cannot acquire — waits
+// Instance A crashes after 25s → lock expires
+// Both A (recovered) and B try to acquire simultaneously!
 ```
 
-Show: implementing a distributed lock (Redis SETNX "mutex key" with expiry) so only ONE service queries the DB while others wait, probabilistic early expiration (refresh cache when TTL < 5% remaining, not at expiry), and jittered cache TTLs (add ± 10% randomness to prevent mass expiry at the same time).""",
+SETNX with TTL has a race condition at the TTL boundary. Show: using Redlock (multi-node Redis distributed lock for true mutual exclusion), renewal before expiry (`setInterval(renewLock, 15_000)` when TTL is 30s), and checking that the lock token matches before renewal (prevents renewing someone else's lock).''',
 
-"""**Debug Scenario:**
-A GraphQL subscription is sending duplicate events to subscribers — every update triggers the subscription 3x:
+'''**Debug Scenario:**
+A CQRS system's read model is inconsistently updated — some records show old data even after the write side confirms:
 
 ```ts
-schema.subscriptionType?.addFields({
-  postUpdated: {
-    subscribe: () => pubsub.asyncIterator(['POST_UPDATED']),
-    resolve: (payload) => payload,
-  },
-});
+// Write side: updates DB, emits event
+await commandBus.dispatch({ type: 'UpdatePrice', productId: 'p1', price: 99 });
+// Event emitted: 'PriceUpdated' → read model projection should update
 
-// On post update — publishing 3 times instead of 1:
-await pubsub.publish('POST_UPDATED', { post });
-await pubsub.publish('POST_UPDATED', { post }); // BUG: copied by mistake
-await pubsub.publish('POST_UPDATED', { post }); // BUG
+// Read side query (too fast):
+const product = await queryBus.query({ type: 'GetProduct', id: 'p1' });
+// product.price: still shows old price!
 ```
 
-Show: auditing all publish call sites for the subscription topic, using a unique event ID (`eventId: uuid()`) and filtering duplicate IDs at the subscriber, and the Apollo Subscription server's built-in deduplication with `filter` function.""",
+Events are processed asynchronously — the read model hasn't caught up. Show: eventual consistency acceptance (this is correct behavior for CQRS), client-side optimistic update while the projection catches up, a `version` field on the read model for staleness detection, and using Kafka consumer lag metrics to monitor projection delay.''',
 
-"""**Debug Scenario:**
-A Redis-based session store causes "ECONNRESET" errors under high load, causing users to be logged out:
+'''**Debug Scenario:**
+An API Gateway times out when one upstream microservice is slow, causing a cascade failure for unrelated routes:
 
 ```ts
-app.use(session({
-  store: new RedisStore({ client: redis }),
-  secret: process.env.SESSION_SECRET,
-  resave: false,
-  saveUninitialized: false,
-}));
+// All routes share one connection pool to all upstream services:
+const proxy = httpProxy.createServer({ target: upstreamUrl });
+// When payment-service is slow (holds pool connections):
+// /api/products also times out — unrelated but shares the pool!
 ```
 
-Under high load, Redis connections are exhausted. `ECONNRESET` means the connection was dropped. Show: configuring `ioredis` with a connection pool (`maxRetriesPerRequest: 3`, `retryStrategy`), using `connect-redis` with retry options, monitoring Redis connection count (`redis.info('clients')`), and horizontal Redis scaling with Cluster mode or Redis Sentinel for high availability.""",
+Connection pool exhaustion from one slow service blocks all routes. Show: separate connection pools per upstream service (isolate the blast radius), request hedging (duplicate the request to a different instance after a threshold), implementing timeout per route (`{ '/api/payments': 5000, '/api/products': 2000 }`), and connection pool `max` and `acquireTimeout` settings.''',
 
-"""**Debug Scenario:**
-A gRPC microservice has a memory leak — each unary RPC call creates a new `grpc.Client` instance that is never destroyed:
-
-```ts
-async function callInventoryService(productId: string) {
-  const client = new InventoryServiceClient(url, credentials); // new client per request!
-  const response = await promisify(client.getStock.bind(client))({ productId });
-  // client never closed!
-  return response;
-}
-```
-
-gRPC clients maintain a connection pool internally. Creating a new client per request creates a new pool, which is never closed. Show: creating the client once at module level (singleton), calling `client.close()` on graceful shutdown, using `@grpc/grpc-js`'s built-in keepalive options, and a client pool pattern for services that require parallel connections.""",
-
-"""**Debug Scenario:**
-A message queue consumer sometimes processes the same message twice, creating duplicate database records:
-
-```ts
-consumer.on('message', async (msg) => {
-  const order = JSON.parse(msg.content.toString());
-  await db.orders.create({ data: order }); // May run twice!
-  channel.ack(msg);                        // Ack AFTER processing
-});
-```
-
-If the service crashes between `create` and `ack`, RabbitMQ redelivers the message. Show: implementing idempotency by storing `message.properties.messageId` in a `processed_messages` table, checking before processing (`if (await alreadyProcessed(msgId)) return channel.ack(msg)`), using PostgreSQL's `ON CONFLICT DO NOTHING` for the idempotency record and the order creation in a single transaction, and `msg.fields.redelivered` flag for early detection.""",
-
-"""**Debug Scenario:**
-A multi-region deployment has diverging data — writes to region A aren't appearing in region B:
-
-```ts
-// Database: CockroachDB with multi-region config
-// Primary region: us-east-1
-// Secondary region: eu-west-1
-
-// User in EU writes data, reads it back immediately → shows old data!
-const result = await db.users.update({ where: { id }, data: { name } });
-const freshUser = await db.users.findUnique({ where: { id } }); // stale!
-```
-
-Read-after-write consistency is not guaranteed across regions — the read may route to a secondary region replica that hasn't caught up. Show: using `Durable` reads in CockroachDB (`SET locality_optimized_search TO OFF`), read-your-writes sessions (`BEGIN; ... COMMIT` keeps reads on the same node), routing reads to the region that just accepted the write, and eventual consistency acceptance with optimistic UI updates.""",
-
-"""**Debug Scenario:**
-A Kubernetes deployment of a Node.js app shows "502 Bad Gateway" errors during deploys — a few seconds of downtime during each rolling update:
+'''**Debug Scenario:**
+A developer's Kubernetes readiness probe causes all pods to restart simultaneously during a deployment:
 
 ```yaml
-spec:
-  strategy:
-    rollingUpdate:
-      maxSurge: 1
-      maxUnavailable: 0
+livenessProbe:
+  httpGet:
+    path: /health
+    port: 3000
+  initialDelaySeconds: 5
+  periodSeconds: 10
+  failureThreshold: 3
 ```
 
-During rolling update, the old pod receives `SIGTERM` and stops accepting new connections immediately, but the Load Balancer hasn't removed it from rotation yet — requests during this window get 502. Show: adding a `preStop` hook with `sleep 5` to give the LB time to deregister (`lifecycle.preStop.exec.command: ['sleep', '5']`), graceful shutdown in Node.js (`server.close(() => process.exit(0))`), and `terminationGracePeriodSeconds: 30` to allow in-flight requests to complete.""",
+During deployment, new pods start too quickly, their health check fails 3 times (app not fully started), Kubernetes kills and restarts them — cascading restarts because `initialDelaySeconds: 5` is too short for a 15-second Node.js startup. Show: increasing `initialDelaySeconds` to 20-30s, using `startupProbe` (separate from liveness, allows longer startup grace period), a `readinessProbe` (separate from liveness — pod is removed from Service load balancer, not restarted), and the difference between `livenessProbe` (restart?) and `readinessProbe` (receive traffic?).''',
 
-"""**Debug Scenario:**
-A distributed lock using Redis `SETNX` has a race condition — two processes both acquire the lock simultaneously:
-
-```ts
-async function acquireLock(key: string, ttl: number) {
-  const acquired = await redis.setnx(key, 'locked');
-  if (acquired) {
-    await redis.expire(key, ttl); // NOT ATOMIC with setnx!
-    return true;
-  }
-  return false;
-}
-```
-
-Between `setnx` and `expire`, the process might crash — the lock is never released (deadlock). Two processes could both see `setnx=0` if the lock expired between their checks. Show: using `SET key value EX ttl NX` (atomic single command), Redlock algorithm for distributed locking across multiple Redis nodes, and the unique lock token value for safe release (`SET key uuid EX ttl NX; ...if GET key === uuid: DEL key`).""",
-
-"""**Debug Scenario:**
-An event-driven system using Kafka shows messages processing out of order — newer messages are sometimes processed before older ones for the same entity:
+'''**Debug Scenario:**
+A message queue consumer acknowledges messages before processing completes, causing data loss on crashes:
 
 ```ts
-// Multiple consumers in a consumer group, each processing messages concurrently
 consumer.on('message', async (msg) => {
-  await processOrder(msg.value.orderId, msg.value); // concurrent!
+  channel.ack(msg); // Acknowledge FIRST — BUG!
+  await processPayment(msg.content); // If this throws, message is already acked
 });
 ```
 
-Kafka guarantees ordering within a partition but not across partitions. Multiple consumers mean messages for the same order can be on different partitions. Show: using the `orderId` as the Kafka partition key (`{ key: order.id, value: JSON.stringify(event) }`) to ensure all events for an order go to the same partition, sequential processing within a partition (one consumer per partition, no concurrency within the handler), and the consumer group partition assignment strategy.""",
+If `processPayment` throws after `ack`, the message is gone forever — no replay possible. Show: acknowledging AFTER successful processing (`await processPayment(msg.content); channel.ack(msg)`), using `nack(msg, false, true)` to requeue on failure, idempotency keys to safely retry requeued messages, and dead letter queues for messages that fail repeatedly.''',
 
-"""**Debug Scenario:**
-An API Gateway's rate limiter allows burst requests that exceed the intended rate:
+'''**Debug Scenario:**
+A developer's gRPC streaming call creates a memory leak because the stream is never closed:
 
 ```ts
-// Token bucket rate limiter: 100 requests/minute
-const limiter = new TokenBucket({ capacity: 100, refillRate: 100 / 60 });
+const stream = grpcClient.StreamData({ startTime: Date.now() });
 
-// A client sends 100 requests in 1 second → all allowed!
-// Then 0 requests for 59 seconds → bucket refills to 100
-// Then 100 requests in 1 second again → all allowed!
-// In 2 seconds: 200 requests processed — double the intended rate!
+stream.on('data', (chunk) => {
+  processChunk(chunk);
+});
+// Component unmounts / function exits → stream.cancel() never called!
 ```
 
-Token bucket allows burst equal to bucket capacity at any time. Show: the sliding window log algorithm (stores timestamps of each request, counts requests in the past 60 seconds — no burst possible), the sliding window counter (compromise: tracks current and previous window counts, interpolates), and `@upstash/ratelimit`'s implementation of each strategy.""",
+gRPC streaming connections stay open until explicitly closed. Show: calling `stream.cancel()` in cleanup (`return () => stream.cancel()` in `useEffect`), the `stream.on('end', ...)` cleanup handler, setting a timeout (`setTimeout(() => stream.cancel(), MAX_DURATION)`), and the gRPC call deadline option (`const deadline = new Date(Date.now() + 30_000); client.method({}, { deadline })`).''',
 
-"""**Debug Scenario:**
-A Next.js API route that calls a database connection pool is hitting "too many connections" in production:
+'''**Debug Scenario:**
+A Redis pub/sub system loses messages when a subscriber is briefly disconnected and reconnects:
 
 ```ts
-// lib/db.ts — runs on every import!
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  max: 10,
+// Subscriber:
+const sub = redis.duplicate();
+sub.subscribe('events', (message) => processEvent(message));
+// If sub disconnects for 5 seconds → all messages published during that time are LOST
+```
+
+Redis Pub/Sub is fire-and-forget — no persistence, no message acknowledgment. Disconnected subscribers miss all messages. Show: using Redis Streams instead of Pub/Sub (`XADD`/`XREAD` with consumer groups), consumer groups providing at-least-once delivery with `XACK`, `XREADGROUP` delivering from a pending list for unacknowledged messages, and persistent offset tracking so reconnected consumers only read new messages.''',
+
+'''**Debug Scenario:**
+A developer's API endpoint is vulnerable to SSRF (Server-Side Request Forgery) via an unvalidated URL parameter:
+
+```ts
+app.get('/proxy', async (req, res) => {
+  const { url } = req.query;
+  const response = await fetch(url); // Attacker can pass: http://169.254.169.254/latest/meta-data/
+  res.json(await response.json());   // Returns AWS EC2 instance metadata!
 });
 ```
 
-In Next.js API routes (Serverless Functions), each function invocation may import `db.ts` fresh, creating a NEW pool with 10 connections. With 100 concurrent requests, that's 1000 connections. Show: using `globalThis` to reuse the pool across invocations (`globalThis.__pgPool ??= new Pool(...)`), PgBouncer for connection pooling at the infrastructure level (thousands of app connections share a fixed pool), and Neon's serverless driver which uses HTTP/WebSocket for connection-less queries.""",
+Show: an allowlist of safe destinations (`if (!ALLOWED_DOMAINS.includes(new URL(url).hostname)) throw`), blocking private IP ranges (10.x, 192.168.x, 169.254.x — `ipaddr.js` library), blocking non-HTTP protocols (file://, gopher://), and using a dedicated outbound proxy that enforces network-level restrictions.''',
 
-"""**Debug Scenario:**
-A webhook receiver service sometimes misses webhook events because the HTTP response times out before the event is fully processed:
+'''**Debug Scenario:**
+A service's database migration fails in production because it holds a table lock, blocking all queries for 30 minutes:
+
+```sql
+-- Migration file:
+ALTER TABLE products ADD COLUMN description TEXT;
+-- In PostgreSQL, ADD COLUMN with no default acquires AccessExclusiveLock — blocks ALL reads and writes!
+```
+
+PostgreSQL `ALTER TABLE` acquires the strongest lock, blocking all concurrent operations. Show: using `ADD COLUMN description TEXT DEFAULT NULL` in modern PostgreSQL (no rewrite needed for nullable columns without default), `CREATE INDEX CONCURRENTLY` instead of regular `CREATE INDEX`, zero-downtime migration pattern (add nullable column → deploy → backfill → add constraint), and `lock_timeout: '2s'` to fail fast instead of hanging.''',
+
+'''**Debug Scenario:**
+A developer's service mesh times out on inter-service calls despite the target service responding in 50ms:
+
+```
+Service A → (via Envoy sidecar) → Service B
+Service A configured: timeout = 1s
+Service B responds: 50ms
+But Service A gets timeout errors!
+```
+
+The Envoy sidecar's own timeout (default: 15s) isn't the issue — check if retries are configured. Envoy retries on 503, each with its own timeout. With 3 retries × 50ms response time + retry timing overhead, the total can exceed Service A's 1s timeout. Show: disabling retries for non-idempotent endpoints (`x-envoy-retry-on: retriable-status-codes`), aligning timeout hierarchies (`serviceA.timeout > retries × serviceB.timeout + jitter`), and Istio's `VirtualService` timeout and retry configuration.''',
+
+'''**Debug Scenario:**
+A developer's container is labeled as "running" by Kubernetes but the application is actually deadlocked:
+
+```yaml
+livenessProbe:
+  httpGet:
+    path: /health
+    port: 3000
+  # /health returns 200 even when the app is deadlocked!
+```
+
+The `/health` endpoint always returns 200 (it's a static handler that never touches the deadlocked service layer). Show: adding meaningful health checks that probe actual functionality (`await db.raw('SELECT 1')`, `await redis.ping()`), using deep vs shallow health checks (k8s liveness = shallow: "am I running?", readiness = deep: "can I serve traffic?"), and a `readinessProbe` that checks queue depth, active requests, and connection pool availability.''',
+
+'''**Debug Scenario:**
+An API's `Content-Security-Policy` header is configured incorrectly, and `'unsafe-inline'` negates all script-src restrictions:
 
 ```ts
-app.post('/webhooks', async (req, res) => {
-  const event = req.body;
-  await processWebhookEvent(event); // Takes 5-10 seconds!
-  res.json({ received: true });     // Sender times out after 3 seconds!
+app.use((req, res, next) => {
+  res.setHeader('Content-Security-Policy',
+    "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.example.com; style-src 'self' 'unsafe-inline'");
+  next();
 });
 ```
 
-Webhook senders expect a fast `200 OK` response (typically < 5 seconds). If they don't get it, they retry, causing duplicate processing. Show: responding immediately with `200 OK`, then processing asynchronously (`res.json({ received: true }); processInBackground(event)`), persisting to a queue (Redis, BullMQ) and processing separately, and using the webhook event `id` for idempotency (track processed IDs to skip retries).""",
+`'unsafe-inline'` allows all inline scripts — equivalent to having no CSP for XSS protection. Show: replacing `'unsafe-inline'` with a nonce (`script-src 'self' 'nonce-${randomNonce}'`), adding the `nonce` attribute to legitimate `<script>` tags, the `strict-dynamic` keyword for loading scripts dynamically, and using `Content-Security-Policy-Report-Only` with a `report-uri` to incrementally tighten policy without breaking the site.''',
 
-"""**Debug Scenario:**
-A service-to-service authentication using short-lived JWTs is failing frequently because the token issuance service and the consuming service have clock skew:
-
-```ts
-// Token issuer: generates JWT with 60-second expiry
-const token = jwt.sign({ sub: serviceId }, secret, { expiresIn: 60 });
-
-// Consumer: validates with current time
-jwt.verify(token, secret); // Fails! Consumer clock is 90s ahead of issuer!
-```
-
-60-second JWT verified by a service whose clock is 90 seconds ahead → token is already expired. Show: adding clock skew tolerance to `jwt.verify` (`{ clockTolerance: 120 }` — allow ±2 minutes), increasing token expiry to 5-15 minutes for service tokens, using NTP synchronization across all services, and the `iat` (issued at) vs `exp` (expires at) claims.""",
-
-"""**Debug Scenario:**
-A background job that processes images is using 100% CPU on a single core and taking 30 minutes per batch, blocking all other work in the process:
+'''**Debug Scenario:**
+A developer's Node.js cluster with 4 workers shows one worker handling 90% of all requests:
 
 ```ts
-// Image processing worker (single-threaded):
-for (const image of images) {
-  await sharp(image.buffer).resize(800).toFile(image.output); // CPU-bound!
+const cluster = require('cluster');
+if (cluster.isPrimary) {
+  for (let i = 0; i < 4; i++) cluster.fork();
+} else {
+  app.listen(3000); // All workers listen on port 3000
 }
 ```
 
-`sharp` is CPU-intensive. Running sequentially in Node.js's event loop blocks other work. Show: distributing work across `worker_threads` (`os.cpus().length` workers), using a `WorkerPool` to fan out images to workers, `sharp`'s built-in thread pool (`sharp.concurrency(N)`) as a simpler alternative, and `Promise.allSettled` for parallel processing with error collection.""",
+Node.js cluster's default scheduling on Linux is `SCHED_RR` (round-robin) but on some systems defaults to `OS` scheduling which routes all connections to the same worker (connection inheritance from the primary). Show: setting `cluster.schedulingPolicy = cluster.SCHED_RR`, using nginx or HAProxy as the actual load balancer (instead of Node.js cluster), and PM2's cluster mode which handles this correctly.''',
 
-"""**Debug Scenario:**
-An Elasticsearch index has degraded write performance and frequent GC pauses after 6 months. The index has 500M documents and was never optimized:
-
-```ts
-// Every save creates a new Lucene segment:
-await es.index({ index: 'events', document: event });
-// After 6 months: thousands of tiny segments → slow search + high GC
-```
-
-Elasticsearch auto-merges segments, but aggressive writes outpace merging. Show: scheduling `forcemerge` during low-traffic windows (`POST /events/_forcemerge?max_num_segments=1`), enabling `index.merge.policy.segments_per_tier: 5` for faster auto-merging, configuring `refresh_interval: 30s` for high-throughput indexes (fewer segments), time-based index rotation (daily/weekly indices with ILM for large event streams), and shard size optimization (target 10-50GB per shard).""",
-
-"""**Debug Scenario:**
-A REST API designed with resource-oriented URLs breaks down when implementing a complex workflow that spans multiple resources:
+'''**Debug Scenario:**
+A developer's S3 presigned URL expires too quickly under high load because clock skew between the signing server and S3 differs:
 
 ```ts
-// Simple CRUD — fine with REST:
-POST   /orders
-GET    /orders/:id
-PATCH  /orders/:id
-DELETE /orders/:id
-
-// But a "checkout" workflow needs to:
-// 1. Reserve inventory
-// 2. Create payment intent
-// 3. Create order
-// 4. Send confirmation email
-// All atomically — how to model this in REST?
-PATCH /orders/:id { action: 'checkout' } // RPC disguised as REST — bad design
-```
-
-Show: modeling as a resource (`POST /checkout-sessions`), the command pattern endpoint (`POST /orders/:id/actions/checkout`), using a CQRS command bus (`POST /commands/CheckoutOrder`), and when to abandon REST for GraphQL mutations or RPC (gRPC) for complex workflows.""",
-
-"""**Debug Scenario:**
-A React frontend's API calls are failing with CORS errors after a backend deployment switched from a single API server to multiple services behind a gateway:
-
-```
-Access-Control-Allow-Origin header missing from https://api.example.com/v2/products
-```
-
-The new API Gateway handles routing but doesn't forward the CORS `OPTIONS` preflight to the origin services — it returns `403` for the preflight. Show: handling CORS at the gateway level (not in each service), configuring Kong/AWS API Gateway/nginx CORS for `OPTIONS` preflight responses, the correct CORS response headers (`Access-Control-Allow-Origin`, `Access-Control-Allow-Methods`, `Access-Control-Allow-Headers`), and why `*` doesn't work with `credentials: 'include'`.""",
-
-"""**Debug Scenario:**
-A multi-tenant SaaS app has a data isolation bug — querying a tenant's data sometimes returns another tenant's records:
-
-```ts
-// Row-level security via app-level filter:
-const data = await db.records.findMany({
-  where: {
-    tenantId: req.tenant.id, // Correct filter
-    ...userProvidedFilters,  // BUG: userProvidedFilters can override tenantId!
-  },
+const signedUrl = s3.getSignedUrl('getObject', {
+  Bucket: 'my-bucket',
+  Key: 'file.pdf',
+  Expires: 300,  // 5 minutes
 });
+// Users get "Request has expired" errors after 3 minutes!
 ```
 
-If `userProvidedFilters` contains `{ tenantId: 'other-tenant' }`, the where clause uses the user's provided `tenantId` instead of the session's tenant. Show: enforcing `tenantId` with `AND` semantics rather than merged `where` (`db.records.findMany({ where: { AND: [{ tenantId: reqTenantId }, userFilters] } })`), using PostgreSQL Row-Level Security (RLS) as a defense-in-depth measure, and audit logging for cross-tenant data access attempts.""",
-
-"""**Debug Scenario:**
-A Next.js server that handles file uploads crashes with "out of memory" when users upload large files:
-
-```ts
-export const config = { api: { bodyParser: { sizeLimit: '50mb' } } };
-
-export default async function handler(req, res) {
-  const buffer = req.body; // 50MB loaded into memory!
-  await processAndUploadToS3(buffer);
-}
-```
-
-Loading the entire 50MB into memory per request is unsustainable under concurrent load. Show: using `busboy` or `formidable` for streaming multipart parsing, piping the Node.js request stream directly to S3 (`s3.upload({ Body: req }).promise()`), using presigned URLs for direct browser-to-S3 upload (bypassing the server entirely), and `Content-Length` validation before reading the body.""",
-
-"""**Debug Scenario:**
-A Prisma ORM query causes N+1 issues that aren't detected in development (small dataset) but crash production (millions of rows):
-
-```ts
-const users = await prisma.user.findMany({ take: 100 });
-for (const user of users) {
-  const posts = await prisma.post.findMany({ where: { authorId: user.id } }); // N+1!
-  process(user, posts);
-}
-```
-
-100 users → 101 database queries. Show: using Prisma's `include: { posts: true }` to join in one query, `select` for specific field projection, the `prisma.$extends` logging extension to detect N+1 at development time, and `prisma.$metrics` for tracking query counts in production.""",
+S3 validates the signature expiry based on the request arrival time. If the signing server's clock is ahead of S3's expected time by 2 minutes, the URL effectively expires in 3 minutes instead of 5. Show: using `aws-sdk` with `credentials.getPromise()` + `Date.now()` logging to detect clock drift, NTP sync for the signing server, increasing the `Expires` value to compensate, and `x-amz-date` header validation (must within 15-minute window).''',
 
 ]
